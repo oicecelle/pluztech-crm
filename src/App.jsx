@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { supabase } from './lib/supabase'
-import { useClinics, useCRMConfig, useLeads, useTemplates } from './hooks/useCRM'
+import { useClinics, useCRMConfig, useLeads, useTemplates, useDisparos } from './hooks/useCRM'
 import CentralClinicas from './pages/CentralClinicas'
 import GuiaPage from './pages/GuiaPage'
 import AutomacoesPage from './pages/AutomacoesPage'
@@ -124,6 +124,138 @@ const Login=({onLogin})=>{
   )
 }
 
+// ─── DISPARO MODAL ───────────────────────────────────────────
+const substituirVariaveis=(texto,lead)=>{
+  if(!texto||!lead) return texto||''
+  return texto
+    .replace(/\{nome\}/gi, lead.nome||'')
+    .replace(/\{sobrenome\}/gi, lead.sobrenome||'')
+    .replace(/\{procedimento\}/gi, lead.proximo_agendamento_procedimento||'')
+    .replace(/\{data\}/gi, lead.proximo_agendamento_data?new Date(lead.proximo_agendamento_data).toLocaleDateString('pt-BR'):'')
+    .replace(/\{horario\}/gi, lead.proximo_agendamento_horario||'')
+    .replace(/\{local\}/gi, lead.proximo_agendamento_local||'')
+    .replace(/\{valor\}/gi, lead.valor?('R$ '+Number(lead.valor).toLocaleString('pt-BR')):'')
+}
+
+function DisparoModal({leads,selected,templates,onClose,onConfirm}){
+  const leadsAlvo=leads.filter(l=>selected.includes(l.id))
+  const [templateId,setTemplateId]=useState(templates[0]?.id||'')
+  const [mensagemCustom,setMensagemCustom]=useState('')
+  const [usarCustom,setUsarCustom]=useState(false)
+  const [agendadoPara,setAgendadoPara]=useState('')
+  const [intervalo,setIntervalo]=useState('aleatorio')
+  const [intervaloFixo,setIntervaloFixo]=useState(60)
+  const [saving,setSaving]=useState(false)
+  const [previewIdx,setPreviewIdx]=useState(0)
+
+  const template=templates.find(t=>t.id===templateId)
+  const textoBase=usarCustom?mensagemCustom:(template?.conteudo||'')
+  const leadPreview=leadsAlvo[previewIdx]
+  const msgPreview=substituirVariaveis(textoBase,leadPreview)
+
+  const handleConfirm=async()=>{
+    if(!textoBase.trim()){alert('Selecione um template ou escreva uma mensagem.');return}
+    setSaving(true)
+    const msgPorLead={}
+    leadsAlvo.forEach(l=>{msgPorLead[l.id]={whatsapp:l.whatsapp,mensagem:substituirVariaveis(textoBase,l)}})
+    const disparo={
+      template_id:usarCustom?null:templateId,
+      mensagem_base:textoBase,
+      agendado_para:agendadoPara||null,
+      intervalo_tipo:intervalo,
+      intervalo_segundos:intervalo==='fixo'?intervaloFixo:null,
+      status:'pendente',
+    }
+    await onConfirm(disparo,selected,msgPorLead)
+    setSaving(false)
+  }
+
+  const rowS={padding:'12px 0',borderBottom:'1px solid #F3F4F6',display:'flex',alignItems:'center',gap:10}
+
+  return(
+    <Modal open onClose={onClose} title="Novo Disparo" width={700}>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:20}}>
+        {/* Coluna esquerda */}
+        <div style={{display:'flex',flexDirection:'column',gap:16}}>
+          <div>
+            <label style={{fontSize:11,fontWeight:700,color:'#6B7280',letterSpacing:'0.05em',display:'block',marginBottom:6}}>MENSAGEM</label>
+            <div style={{display:'flex',gap:8,marginBottom:8}}>
+              <button onClick={()=>setUsarCustom(false)} style={{padding:'5px 12px',borderRadius:8,fontSize:12,fontWeight:600,cursor:'pointer',border:!usarCustom?'1.5px solid #0F0F0F':'1.5px solid #E5E7EB',background:!usarCustom?'#0F0F0F':'#fff',color:!usarCustom?'#fff':'#374151',fontFamily:'inherit'}}>Template</button>
+              <button onClick={()=>setUsarCustom(true)} style={{padding:'5px 12px',borderRadius:8,fontSize:12,fontWeight:600,cursor:'pointer',border:usarCustom?'1.5px solid #0F0F0F':'1.5px solid #E5E7EB',background:usarCustom?'#0F0F0F':'#fff',color:usarCustom?'#fff':'#374151',fontFamily:'inherit'}}>Personalizada</button>
+            </div>
+            {!usarCustom?(
+              <select value={templateId} onChange={e=>setTemplateId(e.target.value)} style={{width:'100%',border:'1px solid #E5E7EB',borderRadius:8,padding:'8px 12px',fontSize:13,outline:'none',fontFamily:'inherit',background:'#FAFAFA'}}>
+                <option value=''>— selecione —</option>
+                {templates.map(t=><option key={t.id} value={t.id}>{t.nome}</option>)}
+              </select>
+            ):(
+              <textarea value={mensagemCustom} onChange={e=>setMensagemCustom(e.target.value)} rows={5} placeholder={'Olá {nome}, tudo bem?\n\nVariáveis: {nome} {sobrenome} {procedimento} {data} {horario} {local} {valor}'} style={{width:'100%',border:'1px solid #E5E7EB',borderRadius:8,padding:'8px 12px',fontSize:13,outline:'none',fontFamily:'inherit',background:'#FAFAFA',resize:'vertical',boxSizing:'border-box'}}/>
+            )}
+          </div>
+
+          <div>
+            <label style={{fontSize:11,fontWeight:700,color:'#6B7280',letterSpacing:'0.05em',display:'block',marginBottom:6}}>AGENDAMENTO</label>
+            <input type="datetime-local" value={agendadoPara} onChange={e=>setAgendadoPara(e.target.value)} style={{width:'100%',border:'1px solid #E5E7EB',borderRadius:8,padding:'8px 12px',fontSize:13,outline:'none',fontFamily:'inherit',background:'#FAFAFA'}}/>
+            <div style={{fontSize:11,color:'#9CA3AF',marginTop:4}}>Vazio = disparar imediatamente</div>
+          </div>
+
+          <div>
+            <label style={{fontSize:11,fontWeight:700,color:'#6B7280',letterSpacing:'0.05em',display:'block',marginBottom:6}}>INTERVALO ENTRE MENSAGENS</label>
+            <div style={{display:'flex',gap:8,marginBottom:8}}>
+              {[['aleatorio','Aleatório (1–4 min)'],['fixo','Fixo']].map(([v,l])=>(
+                <button key={v} onClick={()=>setIntervalo(v)} style={{padding:'5px 12px',borderRadius:8,fontSize:12,fontWeight:600,cursor:'pointer',border:intervalo===v?'1.5px solid #0F0F0F':'1.5px solid #E5E7EB',background:intervalo===v?'#0F0F0F':'#fff',color:intervalo===v?'#fff':'#374151',fontFamily:'inherit'}}>{l}</button>
+              ))}
+            </div>
+            {intervalo==='fixo'&&(
+              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                <input type="number" value={intervaloFixo} onChange={e=>setIntervaloFixo(Number(e.target.value))} min={10} max={600} style={{width:80,border:'1px solid #E5E7EB',borderRadius:8,padding:'7px 10px',fontSize:13,outline:'none',fontFamily:'inherit'}}/>
+                <span style={{fontSize:13,color:'#6B7280'}}>segundos</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Coluna direita */}
+        <div style={{display:'flex',flexDirection:'column',gap:16}}>
+          <div style={{background:'#F9F9F9',borderRadius:10,padding:14,border:'1px solid #F0F0F0'}}>
+            <div style={{fontSize:11,fontWeight:700,color:'#6B7280',letterSpacing:'0.05em',marginBottom:8}}>{'PRÉVIA ('+(leadsAlvo.length>1?('lead '+(previewIdx+1)+'/'+leadsAlvo.length):(leadPreview?.nome||'—'))+')'}</div>
+            {leadsAlvo.length>1&&(
+              <div style={{display:'flex',gap:6,marginBottom:8}}>
+                <button onClick={()=>setPreviewIdx(i=>Math.max(0,i-1))} disabled={previewIdx===0} style={{padding:'2px 8px',fontSize:12,cursor:'pointer',borderRadius:6,border:'1px solid #E5E7EB',background:'#fff',fontFamily:'inherit'}}>‹</button>
+                <button onClick={()=>setPreviewIdx(i=>Math.min(leadsAlvo.length-1,i+1))} disabled={previewIdx===leadsAlvo.length-1} style={{padding:'2px 8px',fontSize:12,cursor:'pointer',borderRadius:6,border:'1px solid #E5E7EB',background:'#fff',fontFamily:'inherit'}}>›</button>
+              </div>
+            )}
+            <div style={{fontSize:13,color:'#0F0F0F',lineHeight:1.6,whiteSpace:'pre-wrap',minHeight:80}}>{msgPreview||<span style={{color:'#D1D5DB'}}>Selecione um template para ver a prévia</span>}</div>
+          </div>
+
+          <div>
+            <div style={{fontSize:11,fontWeight:700,color:'#6B7280',letterSpacing:'0.05em',marginBottom:8}}>LEADS SELECIONADOS ({leadsAlvo.length})</div>
+            <div style={{maxHeight:180,overflowY:'auto',display:'flex',flexDirection:'column'}}>
+              {leadsAlvo.map((l,i)=>(
+                <div key={l.id} style={{...rowS,opacity:i===previewIdx?1:0.6}}>
+                  <div style={{width:6,height:6,borderRadius:'50%',background:i===previewIdx?'#10B981':'#D1D5DB',flexShrink:0}}/>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:13,fontWeight:600,color:'#0F0F0F'}}>{l.nome} {l.sobrenome}</div>
+                    <div style={{fontSize:11,color:'#9CA3AF'}}>{l.whatsapp}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:24,paddingTop:16,borderTop:'1px solid #F3F4F6'}}>
+        <span style={{fontSize:12,color:'#9CA3AF'}}>{leadsAlvo.length} mensagem{leadsAlvo.length!==1?'s':''} serão criadas</span>
+        <div style={{display:'flex',gap:10}}>
+          <Btn variant="secondary" onClick={onClose}>Cancelar</Btn>
+          <Btn variant="primary" onClick={handleConfirm} disabled={saving||!textoBase.trim()}>{saving?'Criando...':'Criar disparo'}</Btn>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
 // ─── CRM INLINE (para usar dentro do Guia) ───────────────────
 function CRMInline({ clinic, clinics, estagios, statusList, etiquetas, interesses, leads, leadsLoading, createLead, updateLead, templates, createDisparo, configActions }) {
   const [filters,setFilters]=useState({busca:'',estagio:'',status:'',etiqueta:'',interesse:'',dataInicio:'',dataFim:''})
@@ -244,6 +376,7 @@ function CRMInline({ clinic, clinics, estagios, statusList, etiquetas, interesse
       </div>
 
       {(openLead||showNewLead)&&<LeadModal lead={openLead} onClose={()=>{setOpenLead(null);setShowNewLead(false)}} estagios={estagios} statusList={statusList} etiquetas={etiquetas} interesses={interesses} onSave={handleSaveLead} saving={saving}/>}
+      {showDisparo&&<DisparoModal leads={leads} selected={selected} templates={templates} onClose={()=>setShowDisparo(false)} onConfirm={async(disparo,ids,msgPorLead)=>{const{error}=await createDisparo(disparo,ids,msgPorLead);if(error)showT('Erro ao criar disparo: '+error.message,'error');else{showT(`Disparo criado para ${ids.length} lead(s)!`);setSelected([]);setShowDisparo(false)}}}/>}
       {toast&&<Toast msg={toast.msg} type={toast.type}/>}
     </div>
   )
@@ -269,6 +402,7 @@ export default function App() {
   const{estagios,statusList,etiquetas,interesses,...configActions}=useCRMConfig(clinicSelecionada?.id)
   const{leads,loading:leadsLoading,createLead,updateLead}=useLeads(clinicSelecionada?.id)
   const{templates}=useTemplates(clinicSelecionada?.id)
+  const{createDisparo}=useDisparos(clinicSelecionada?.id)
 
   if(authLoading) return <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center'}}><Spinner/></div>
   if(!session) return <Login onLogin={()=>{}}/>
@@ -302,7 +436,7 @@ export default function App() {
       createLead={createLead}
       updateLead={updateLead}
       templates={templates}
-      createDisparo={async()=>{}}
+      createDisparo={createDisparo}
       configActions={configActions}
     />
   )
