@@ -1,12 +1,18 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 
-// ── CORES ─────────────────────────────────────────────────────
+// ── CORES DARK ────────────────────────────────────────────────
 const C = {
-  preto:'#0F0F0F', branco:'#FFFFFF', marrom:'#8B6F47',
-  creme:'#FAF7F2', cinza:'#6B7280', borda:'#E5E7EB',
-  cinzaClaro:'#F3F4F6', verde:'#10B981', vermelho:'#EF4444',
+  preto:'#FAF7F2',    // texto principal (claro)
+  branco:'#1a1a1a',   // fundo card/modal (escuro)
+  marrom:'#8B6F47',
+  creme:'#222222',    // fundo input (escuro)
+  cinza:'#9ca3af',    // texto secundário
+  borda:'#2a2a2a',    // borda
+  cinzaClaro:'#161616', // fundo alternativo
+  verde:'#22c55e', vermelho:'#ef4444',
   azul:'#3B82F6', amarelo:'#F59E0B',
+  bg:'#0F0F0F',
 }
 
 // ── PERMISSÕES ────────────────────────────────────────────────
@@ -42,11 +48,11 @@ const ROLE_PERMISSOES_PADRAO = {
 // ── BASE ──────────────────────────────────────────────────────
 const Btn = ({ children, onClick, variant='primary', size='md', disabled=false }) => {
   const v = {
-    primary:   { background:C.preto, color:C.branco, border:'none' },
-    secondary: { background:C.cinzaClaro, color:'#374151', border:`1px solid ${C.borda}` },
+    primary:   { background:C.marrom, color:'#fff', border:'none' },
+    secondary: { background:C.cinzaClaro, color:C.preto, border:`1px solid ${C.borda}` },
     ghost:     { background:'transparent', color:C.cinza, border:'1px solid transparent' },
-    danger:    { background:'#FEF2F2', color:C.vermelho, border:'1px solid #FCA5A5' },
-    success:   { background:'#ECFDF5', color:'#065F46', border:'1px solid #6EE7B7' },
+    danger:    { background:C.vermelho+'18', color:C.vermelho, border:`1px solid ${C.vermelho}44` },
+    success:   { background:C.verde+'18', color:C.verde, border:`1px solid ${C.verde}44` },
   }
   return (
     <button onClick={onClick} disabled={disabled}
@@ -60,7 +66,7 @@ const Input = ({ label, value, onChange, type='text', placeholder='', required=f
   <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
     {label && <label style={{ fontSize:11, fontWeight:700, color:C.cinza, letterSpacing:'0.05em' }}>{label}{required && <span style={{ color:C.vermelho }}> *</span>}</label>}
     <input type={type} value={value||''} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
-      style={{ border:`1px solid ${C.borda}`, borderRadius:8, padding:'9px 12px', fontSize:13, color:C.preto, background:C.creme, outline:'none', fontFamily:'inherit' }} />
+      style={{ border:`1px solid ${C.borda}`, borderRadius:8, padding:'9px 12px', fontSize:13, color:C.preto, background:C.creme, outline:'none', fontFamily:'inherit', color:C.preto }} />
   </div>
 )
 
@@ -71,10 +77,10 @@ const Badge = ({ label, cor }) => (
 const Modal = ({ open, onClose, title, children, width=600 }) => {
   if (!open) return null
   return (
-    <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', backdropFilter:'blur(4px)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
-      <div onClick={e=>e.stopPropagation()} style={{ background:C.branco, borderRadius:16, width:'100%', maxWidth:width, maxHeight:'90vh', overflow:'hidden', display:'flex', flexDirection:'column', boxShadow:'0 30px 80px rgba(0,0,0,0.25)' }}>
+    <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.75)', backdropFilter:'blur(4px)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
+      <div onClick={e=>e.stopPropagation()} style={{ background:C.branco, border:`1px solid ${C.borda}`, borderRadius:16, width:'100%', maxWidth:width, maxHeight:'90vh', overflow:'hidden', display:'flex', flexDirection:'column', boxShadow:'0 30px 80px rgba(0,0,0,0.6)' }}>
         <div style={{ padding:'20px 24px', borderBottom:`1px solid ${C.borda}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-          <h3 style={{ margin:0, fontSize:15, fontWeight:700 }}>{title}</h3>
+          <h3 style={{ margin:0, fontSize:15, fontWeight:700, color:C.preto }}>{title}</h3>
           <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', fontSize:22, color:C.cinza }}>×</button>
         </div>
         <div style={{ padding:24, overflowY:'auto', flex:1 }}>{children}</div>
@@ -90,7 +96,7 @@ const Spinner = () => (
 )
 
 const Toast = ({ msg, type='success', onClose }) => (
-  <div style={{ position:'fixed', bottom:24, right:24, background:type==='error'?'#FEF2F2':'#F0FDF4', border:`1px solid ${type==='error'?'#FCA5A5':'#86EFAC'}`, color:type==='error'?C.vermelho:'#166534', borderRadius:10, padding:'12px 18px', fontSize:13, fontWeight:600, zIndex:2000, boxShadow:'0 4px 20px rgba(0,0,0,0.12)', cursor:'pointer' }} onClick={onClose}>
+  <div style={{ position:'fixed', bottom:24, right:24, background:type==='error'?C.vermelho+'18':'#14532d', border:`1px solid ${type==='error'?C.vermelho+'44':'#22c55e44'}`, color:type==='error'?C.vermelho:C.verde, borderRadius:10, padding:'12px 18px', fontSize:13, fontWeight:600, zIndex:2000, boxShadow:'0 4px 20px rgba(0,0,0,0.4)', cursor:'pointer' }} onClick={onClose}>
     {type==='error'?'✕ ':'✓ '}{msg}
   </div>
 )
@@ -135,7 +141,7 @@ const UsuarioModal = ({ usuario, clinics, onClose, onSave, saving }) => {
           <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
             {ROLES.map(r => (
               <button key={r.value} onClick={() => aplicarRolePadrao(r.value)}
-                style={{ padding:'8px 14px', borderRadius:10, border:`2px solid ${form.role===r.value ? r.cor : C.borda}`, background:form.role===r.value ? r.cor+'15' : C.branco, cursor:'pointer', fontFamily:'inherit', textAlign:'left', transition:'all 0.15s' }}>
+                style={{ padding:'8px 14px', borderRadius:10, border:`2px solid ${form.role===r.value ? r.cor : C.borda}`, background:form.role===r.value ? r.cor+'18' : C.cinzaClaro, cursor:'pointer', fontFamily:'inherit', textAlign:'left', transition:'all 0.15s' }}>
                 <div style={{ fontSize:12, fontWeight:700, color:form.role===r.value ? r.cor : C.preto }}>{r.label}</div>
                 <div style={{ fontSize:11, color:C.cinza, marginTop:2, maxWidth:140 }}>{r.desc}</div>
               </button>
@@ -150,11 +156,11 @@ const UsuarioModal = ({ usuario, clinics, onClose, onSave, saving }) => {
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
             {PERMISSOES.map(p => (
               <label key={p.key} onClick={() => togglePerm(p.key)}
-                style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', borderRadius:8, border:`1px solid ${form.permissoes.includes(p.key) ? C.preto : C.borda}`, background:form.permissoes.includes(p.key) ? '#F9FAFB' : C.branco, cursor:'pointer', transition:'all 0.15s' }}>
-                <div style={{ width:18, height:18, borderRadius:5, border:`2px solid ${form.permissoes.includes(p.key) ? C.preto : C.borda}`, background:form.permissoes.includes(p.key) ? C.preto : 'transparent', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, transition:'all 0.15s' }}>
-                  {form.permissoes.includes(p.key) && <span style={{ color:C.branco, fontSize:11, fontWeight:900 }}>✓</span>}
+                style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', borderRadius:8, border:`1px solid ${form.permissoes.includes(p.key) ? C.marrom : C.borda}`, background:form.permissoes.includes(p.key) ? C.marrom+'18' : C.cinzaClaro, cursor:'pointer', transition:'all 0.15s' }}>
+                <div style={{ width:18, height:18, borderRadius:5, border:`2px solid ${form.permissoes.includes(p.key) ? C.marrom : C.borda}`, background:form.permissoes.includes(p.key) ? C.marrom : 'transparent', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, transition:'all 0.15s' }}>
+                  {form.permissoes.includes(p.key) && <span style={{ color:'#fff', fontSize:11, fontWeight:900 }}>✓</span>}
                 </div>
-                <span style={{ fontSize:12, color:'#374151', fontWeight:form.permissoes.includes(p.key)?600:400 }}>{p.label}</span>
+                <span style={{ fontSize:12, color:C.preto, fontWeight:form.permissoes.includes(p.key)?600:400 }}>{p.label}</span>
               </label>
             ))}
           </div>
@@ -174,11 +180,11 @@ const UsuarioModal = ({ usuario, clinics, onClose, onSave, saving }) => {
             : <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
                 {clinics.map(c => (
                   <label key={c.id} onClick={() => toggleClinica(c.id)}
-                    style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', borderRadius:8, border:`1px solid ${form.clinicas.includes(c.id) ? C.marrom : C.borda}`, background:form.clinicas.includes(c.id) ? C.creme : C.branco, cursor:'pointer', transition:'all 0.15s' }}>
+                    style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', borderRadius:8, border:`1px solid ${form.clinicas.includes(c.id) ? C.marrom : C.borda}`, background:form.clinicas.includes(c.id) ? C.marrom+'18' : C.cinzaClaro, cursor:'pointer', transition:'all 0.15s' }}>
                     <div style={{ width:18, height:18, borderRadius:5, border:`2px solid ${form.clinicas.includes(c.id) ? C.marrom : C.borda}`, background:form.clinicas.includes(c.id) ? C.marrom : 'transparent', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                      {form.clinicas.includes(c.id) && <span style={{ color:C.branco, fontSize:11, fontWeight:900 }}>✓</span>}
+                      {form.clinicas.includes(c.id) && <span style={{ color:'#fff', fontSize:11, fontWeight:900 }}>✓</span>}
                     </div>
-                    <span style={{ fontSize:13, color:'#374151', fontWeight:form.clinicas.includes(c.id)?600:400 }}>{c.name}</span>
+                    <span style={{ fontSize:13, color:C.preto, fontWeight:form.clinicas.includes(c.id)?600:400 }}>{c.name}</span>
                   </label>
                 ))}
               </div>
@@ -187,10 +193,10 @@ const UsuarioModal = ({ usuario, clinics, onClose, onSave, saving }) => {
 
         {/* Ativo */}
         <label style={{ display:'flex', alignItems:'center', gap:10, cursor:'pointer' }}>
-          <div onClick={() => set('ativo', !form.ativo)} style={{ width:40, height:22, borderRadius:99, background:form.ativo ? C.preto : '#D1D5DB', position:'relative', transition:'background 0.2s', flexShrink:0 }}>
-            <div style={{ position:'absolute', top:3, left:form.ativo?21:3, width:16, height:16, borderRadius:'50%', background:C.branco, transition:'left 0.2s', boxShadow:'0 1px 3px rgba(0,0,0,0.2)' }} />
+          <div onClick={() => set('ativo', !form.ativo)} style={{ width:40, height:22, borderRadius:99, background:form.ativo ? C.marrom : '#333', position:'relative', transition:'background 0.2s', flexShrink:0 }}>
+            <div style={{ position:'absolute', top:3, left:form.ativo?21:3, width:16, height:16, borderRadius:'50%', background:'#fff', transition:'left 0.2s', boxShadow:'0 1px 3px rgba(0,0,0,0.4)' }} />
           </div>
-          <span style={{ fontSize:13, color:'#374151' }}>Usuário ativo</span>
+          <span style={{ fontSize:13, color:C.preto }}>Usuário ativo</span>
         </label>
 
         <div style={{ display:'flex', justifyContent:'flex-end', gap:10, paddingTop:16, borderTop:`1px solid ${C.borda}` }}>
@@ -258,7 +264,7 @@ export function PainelAdmin({ clinics, currentUser }) {
 
   const usuariosFiltrados = usuarios.filter(u => u.name?.toLowerCase().includes(busca.toLowerCase()) || u.email?.toLowerCase().includes(busca.toLowerCase()))
 
-  const tabS = (a) => ({ padding:'9px 18px', fontSize:13, fontWeight:600, cursor:'pointer', borderBottom:a?`2px solid ${C.preto}`:'2px solid transparent', color:a?C.preto:C.cinza, background:'none', border:'none', fontFamily:'inherit' })
+  const tabS = (a) => ({ padding:'9px 18px', fontSize:13, fontWeight:600, cursor:'pointer', borderBottom:a?`2px solid ${C.marrom}`:'2px solid transparent', color:a?C.preto:C.cinza, background:'none', border:'none', fontFamily:'inherit' })
 
   return (
     <div style={{ fontFamily:"'DM Sans','Helvetica Neue',sans-serif" }}>
@@ -282,14 +288,14 @@ export function PainelAdmin({ clinics, currentUser }) {
         <>
           <div style={{ marginBottom:16 }}>
             <input value={busca} onChange={e=>setBusca(e.target.value)} placeholder="Buscar por nome ou email..."
-              style={{ border:`1px solid ${C.borda}`, borderRadius:8, padding:'8px 14px', fontSize:13, outline:'none', fontFamily:'inherit', background:C.branco, width:280 }} />
+              style={{ border:`1px solid ${C.borda}`, borderRadius:8, padding:'8px 14px', fontSize:13, outline:'none', fontFamily:'inherit', background:C.creme, color:C.preto, width:280 }} />
           </div>
 
           {loading ? <Spinner /> : (
             <div style={{ background:C.branco, border:`1px solid ${C.borda}`, borderRadius:12, overflow:'hidden' }}>
               <table style={{ width:'100%', borderCollapse:'collapse' }}>
                 <thead>
-                  <tr style={{ background:'#FAFAFA' }}>
+                  <tr style={{ background:C.cinzaClaro }}>
                     {['USUÁRIO','EMAIL','FUNÇÃO','CLÍNICAS','STATUS','ÚLTIMO ACESSO','AÇÕES'].map(h => (
                       <th key={h} style={{ padding:'10px 16px', textAlign:'left', fontSize:11, fontWeight:700, color:C.cinza, letterSpacing:'0.06em', borderBottom:`1px solid ${C.borda}`, whiteSpace:'nowrap' }}>{h}</th>
                     ))}
@@ -303,7 +309,7 @@ export function PainelAdmin({ clinics, currentUser }) {
                     const role = ROLES.find(r => r.value === u.role)
                     const clinicasDoUsuario = (u.clinicas || []).map(id => clinics.find(c => c.id === id)?.name).filter(Boolean)
                     return (
-                      <tr key={u.id} style={{ borderBottom:`1px solid #F9F9F9` }}>
+                      <tr key={u.id} style={{ borderBottom:`1px solid ${C.borda}22` }}>
                         <td style={{ padding:'12px 16px' }}>
                           <div style={{ display:'flex', alignItems:'center', gap:10 }}>
                             <div style={{ width:34, height:34, borderRadius:'50%', background:role?.cor+'20', border:`2px solid ${role?.cor+'40'}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, fontWeight:800, color:role?.cor, flexShrink:0 }}>
@@ -323,7 +329,7 @@ export function PainelAdmin({ clinics, currentUser }) {
                             : <div style={{ display:'flex', gap:4, flexWrap:'wrap' }}>
                                 {clinicasDoUsuario.slice(0,2).map(n => <span key={n} style={{ fontSize:11, background:C.cinzaClaro, borderRadius:99, padding:'2px 8px', color:C.cinza }}>{n}</span>)}
                                 {clinicasDoUsuario.length > 2 && <span style={{ fontSize:11, color:C.cinza }}>+{clinicasDoUsuario.length-2}</span>}
-                                {clinicasDoUsuario.length === 0 && <span style={{ fontSize:11, color:'#D1D5DB' }}>Nenhuma</span>}
+                                {clinicasDoUsuario.length === 0 && <span style={{ fontSize:11, color:C.cinza }}>Nenhuma</span>}
                               </div>
                           }
                         </td>
@@ -403,7 +409,7 @@ export function HistoricoEdições({ clinics, currentUserId, showAll = false }) 
 
   const setF = (k, v) => setFiltros(f => ({ ...f, [k]: v }))
 
-  const selS = { border:`1px solid ${C.borda}`, borderRadius:8, padding:'7px 12px', fontSize:13, outline:'none', fontFamily:'inherit', background:C.branco, cursor:'pointer' }
+  const selS = { border:`1px solid ${C.borda}`, borderRadius:8, padding:'7px 12px', fontSize:13, outline:'none', fontFamily:'inherit', background:C.creme, color:C.preto, cursor:'pointer' }
 
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
@@ -445,7 +451,7 @@ export function HistoricoEdições({ clinics, currentUserId, showAll = false }) 
         <div style={{ background:C.branco, border:`1px solid ${C.borda}`, borderRadius:12, overflow:'hidden' }}>
           <table style={{ width:'100%', borderCollapse:'collapse' }}>
             <thead>
-              <tr style={{ background:'#FAFAFA' }}>
+              <tr style={{ background:C.cinzaClaro }}>
                 {['DATA/HORA', showAll&&'USUÁRIO', 'TIPO', 'SEÇÃO', 'CLÍNICA', 'DETALHE'].filter(Boolean).map(h => (
                   <th key={h} style={{ padding:'10px 16px', textAlign:'left', fontSize:11, fontWeight:700, color:C.cinza, letterSpacing:'0.06em', borderBottom:`1px solid ${C.borda}`, whiteSpace:'nowrap' }}>{h}</th>
                 ))}
@@ -466,7 +472,7 @@ export function HistoricoEdições({ clinics, currentUserId, showAll = false }) 
                       <div style={{ fontSize:11, color:C.cinza }}>{log.users?.email}</div>
                     </td>}
                     <td style={{ padding:'10px 16px' }}><Badge label={tipoInfo.label} cor={tipoInfo.cor} /></td>
-                    <td style={{ padding:'10px 16px', fontSize:13, color:'#374151' }}>{log.entity_type || '—'}</td>
+                    <td style={{ padding:'10px 16px', fontSize:13, color:C.preto }}>{log.entity_type || '—'}</td>
                     <td style={{ padding:'10px 16px', fontSize:12, color:C.cinza }}>{clinicaNome}</td>
                     <td style={{ padding:'10px 16px', fontSize:12, color:C.cinza, maxWidth:260, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                       {log.new_value ? JSON.stringify(log.new_value).slice(0, 80) + '...' : '—'}
@@ -512,7 +518,7 @@ export function MinhaConta({ currentUser, clinics }) {
   }
 
   const role = ROLES.find(r => r.value === currentUser?.role)
-  const tabS = (a) => ({ padding:'9px 18px', fontSize:13, fontWeight:600, cursor:'pointer', borderBottom:a?`2px solid ${C.preto}`:'2px solid transparent', color:a?C.preto:C.cinza, background:'none', border:'none', fontFamily:'inherit' })
+  const tabS = (a) => ({ padding:'9px 18px', fontSize:13, fontWeight:600, cursor:'pointer', borderBottom:a?`2px solid ${C.marrom}`:'2px solid transparent', color:a?C.preto:C.cinza, background:'none', border:'none', fontFamily:'inherit' })
 
   return (
     <div style={{ fontFamily:"'DM Sans','Helvetica Neue',sans-serif", maxWidth:720 }}>
@@ -547,7 +553,7 @@ export function MinhaConta({ currentUser, clinics }) {
           <Input label="Nome completo" value={form.name} onChange={v=>setForm(f=>({...f,name:v}))} />
           <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
             <label style={{ fontSize:11, fontWeight:700, color:C.cinza, letterSpacing:'0.05em' }}>EMAIL</label>
-            <input value={form.email} disabled style={{ border:`1px solid ${C.borda}`, borderRadius:8, padding:'9px 12px', fontSize:13, color:C.cinza, background:'#F9F9F9', outline:'none', fontFamily:'inherit', cursor:'not-allowed' }} />
+            <input value={form.email} disabled style={{ border:`1px solid ${C.borda}`, borderRadius:8, padding:'9px 12px', fontSize:13, color:C.cinza, background:C.cinzaClaro, outline:'none', fontFamily:'inherit', cursor:'not-allowed' }} />
             <span style={{ fontSize:11, color:C.cinza }}>O email não pode ser alterado por aqui. Entre em contato com o administrador.</span>
           </div>
           <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
@@ -572,9 +578,9 @@ export function MinhaConta({ currentUser, clinics }) {
           <Input label="Nova senha" value={senhaForm.nova} onChange={v=>setSenhaForm(f=>({...f,nova:v}))} type="password" placeholder="Mínimo 8 caracteres" />
           <Input label="Confirmar nova senha" value={senhaForm.confirmar} onChange={v=>setSenhaForm(f=>({...f,confirmar:v}))} type="password" placeholder="Repita a senha" />
           {senhaForm.nova && senhaForm.confirmar && senhaForm.nova !== senhaForm.confirmar && (
-            <div style={{ fontSize:12, color:C.vermelho, background:'#FEF2F2', padding:'8px 12px', borderRadius:8 }}>As senhas não conferem</div>
+            <div style={{ fontSize:12, color:C.vermelho, background:C.vermelho+'18', border:`1px solid ${C.vermelho}33`, padding:'8px 12px', borderRadius:8 }}>As senhas não conferem</div>
           )}
-          <div style={{ background:C.creme, borderRadius:8, padding:'12px 14px', fontSize:12, color:C.cinza }}>
+          <div style={{ background:C.cinzaClaro, border:`1px solid ${C.borda}`, borderRadius:8, padding:'12px 14px', fontSize:12, color:C.cinza }}>
             A senha deve ter pelo menos 8 caracteres. Após alterar, você precisará fazer login novamente.
           </div>
           <div style={{ display:'flex', justifyContent:'flex-end' }}>
