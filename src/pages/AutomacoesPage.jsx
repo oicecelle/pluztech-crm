@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { supabase } from '../lib/supabase'
 import { useHorarios, useScripts, useIAPrompt, useAutomacaoLogs } from '../hooks/useAutomacoes'
 
 // ─── UTILITÁRIOS ─────────────────────────────────────────────
@@ -464,6 +465,118 @@ const LogsTab = ({ clinicId }) => {
   )
 }
 
+// ─── ABA N8N FLUXOS ───────────────────────────────────────────
+const N8nTab = ({ clinicId }) => {
+  const [fluxos, setFluxos] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [toast, setToast] = useState(null)
+  const N8N_BASE = 'https://n8n-n8n.rpskbr.easypanel.host'
+  const showT = (msg, type='success') => { setToast({msg,type}); setTimeout(()=>setToast(null),2500) }
+
+  useEffect(() => {
+    if (!clinicId) return
+    setLoading(true)
+    supabase.from('clinica_fluxos_n8n').select('*').eq('clinic_id', clinicId).order('tipo')
+      .then(({ data, error }) => {
+        setFluxos(data || [])
+        setLoading(false)
+      })
+  }, [clinicId])
+
+  const toggleStatus = async (fluxo) => {
+    const novoStatus = fluxo.status === 'ativo' ? 'inativo' : 'ativo'
+    const { error } = await supabase.from('clinica_fluxos_n8n').update({ status: novoStatus }).eq('id', fluxo.id)
+    if (!error) {
+      setFluxos(f => f.map(x => x.id === fluxo.id ? { ...x, status: novoStatus } : x))
+      showT(`Fluxo ${novoStatus === 'ativo' ? 'ativado' : 'desativado'}!`)
+    } else {
+      showT('Erro ao atualizar status: ' + error.message, 'error')
+    }
+  }
+
+  const TIPO_LABEL = {
+    boas_vindas: 'Boas-vindas',
+    followup: 'Follow-up',
+    agendamento: 'Agendamento',
+    confirmacao: 'Confirmação',
+    pos_atendimento: 'Pós-atendimento',
+    disparo: 'Disparo em massa',
+    horario: 'Controle de horário',
+  }
+
+  if (loading) return <Spinner />
+
+  if (fluxos.length === 0) {
+    return (
+      <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+        <div>
+          <h3 style={{ margin:0, fontSize:15, fontWeight:700 }}>Fluxos N8n</h3>
+          <p style={{ margin:'4px 0 0', fontSize:13, color:'#6B7280' }}>Automações conectadas ao n8n desta clínica</p>
+        </div>
+        <div style={{ textAlign:'center', padding:'48px 24px', background:'#F9FAFB', borderRadius:12, border:'1px dashed #E5E7EB' }}>
+          <div style={{ fontSize:40, marginBottom:12 }}>⚡</div>
+          <div style={{ fontSize:15, fontWeight:700, color:'#374151', marginBottom:6 }}>Nenhum fluxo configurado</div>
+          <div style={{ fontSize:13, color:'#6B7280' }}>Fluxos serão criados automaticamente após o onboarding da clínica.</div>
+          <a href={N8N_BASE} target="_blank" rel="noreferrer"
+            style={{ display:'inline-block', marginTop:16, padding:'8px 18px', borderRadius:8, background:'#0F0F0F', color:'#fff', fontSize:13, fontWeight:600, textDecoration:'none' }}>
+            Abrir n8n →
+          </a>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+        <div>
+          <h3 style={{ margin:0, fontSize:15, fontWeight:700 }}>Fluxos N8n</h3>
+          <p style={{ margin:'4px 0 0', fontSize:13, color:'#6B7280' }}>{fluxos.length} fluxo{fluxos.length !== 1 ? 's' : ''} configurado{fluxos.length !== 1 ? 's' : ''}</p>
+        </div>
+        <a href={N8N_BASE} target="_blank" rel="noreferrer"
+          style={{ padding:'7px 14px', borderRadius:8, background:'#0F0F0F', color:'#fff', fontSize:12, fontWeight:600, textDecoration:'none', display:'flex', alignItems:'center', gap:6 }}>
+          Abrir n8n ↗
+        </a>
+      </div>
+
+      {fluxos.map(fluxo => (
+        <Card key={fluxo.id}>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
+            <div style={{ flex:1 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:6 }}>
+                <span style={{ fontSize:14, fontWeight:700, color:'#0F0F0F' }}>
+                  {TIPO_LABEL[fluxo.tipo] || fluxo.tipo || 'Fluxo'}
+                </span>
+                <Badge label={fluxo.status === 'ativo' ? 'Ativo' : 'Inativo'} color={fluxo.status === 'ativo' ? '#10B981' : '#9CA3AF'} />
+              </div>
+              {fluxo.descricao && (
+                <div style={{ fontSize:12, color:'#6B7280', marginBottom:4 }}>{fluxo.descricao}</div>
+              )}
+              {fluxo.workflow_id && (
+                <div style={{ fontSize:11, color:'#9CA3AF', fontFamily:'monospace' }}>Workflow ID: {fluxo.workflow_id}</div>
+              )}
+            </div>
+            <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0 }}>
+              {fluxo.workflow_id && (
+                <a href={`${N8N_BASE}/workflow/${fluxo.workflow_id}`} target="_blank" rel="noreferrer"
+                  style={{ padding:'5px 12px', borderRadius:7, background:'#F3F4F6', color:'#374151', fontSize:12, fontWeight:600, textDecoration:'none', border:'1px solid #E5E7EB', whiteSpace:'nowrap' }}>
+                  Configurar no n8n ↗
+                </a>
+              )}
+              <button onClick={() => toggleStatus(fluxo)}
+                style={{ padding:'5px 14px', borderRadius:7, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'inherit', border: fluxo.status === 'ativo' ? '1px solid #FCA5A5' : '1px solid #6EE7B7', background: fluxo.status === 'ativo' ? '#FEF2F2' : '#ECFDF5', color: fluxo.status === 'ativo' ? '#DC2626' : '#065F46', whiteSpace:'nowrap' }}>
+                {fluxo.status === 'ativo' ? 'Desativar' : 'Ativar'}
+              </button>
+            </div>
+          </div>
+        </Card>
+      ))}
+
+      {toast && <div style={{ position:'fixed', bottom:24, right:24, background:toast.type==='error'?'#FEF2F2':'#F0FDF4', border:`1px solid ${toast.type==='error'?'#FCA5A5':'#86EFAC'}`, color:toast.type==='error'?'#DC2626':'#166534', borderRadius:10, padding:'12px 18px', fontSize:13, fontWeight:600, zIndex:2000 }}>{toast.type==='error'?'✕ ':'✓ '}{toast.msg}</div>}
+    </div>
+  )
+}
+
 // ─── PÁGINA PRINCIPAL ─────────────────────────────────────────
 export default function AutomacoesPage({ clinic, clinics, onChangeClinic }) {
   const [tab, setTab] = useState('horario')
@@ -471,9 +584,10 @@ export default function AutomacoesPage({ clinic, clinics, onChangeClinic }) {
     { id:'horario', label:'🕐 Horário' },
     { id:'scripts', label:'⚡ Scripts' },
     { id:'ia',      label:'🤖 IA' },
+    { id:'n8n',     label:'🔗 Fluxos N8n' },
     { id:'logs',    label:'📋 Logs' },
   ]
-  const tabS = a => ({ padding:'10px 18px', fontSize:13, fontWeight:600, cursor:'pointer', borderBottom:a?'2px solid #0F0F0F':'2px solid transparent', color:a?'#0F0F0F':'#9CA3AF', background:'none', border:'none', fontFamily:'inherit', transition:'all 0.15s', whiteSpace:'nowrap' })
+  const tabS = a => ({ padding:'10px 18px', fontSize:13, fontWeight:600, cursor:'pointer', border:'none', borderBottom:a?'2px solid #0F0F0F':'2px solid transparent', color:a?'#0F0F0F':'#9CA3AF', background:'none', fontFamily:'inherit', transition:'all 0.15s', whiteSpace:'nowrap' })
 
   return (
     <div style={{ maxWidth:900, margin:'0 auto', padding:24 }}>
@@ -483,9 +597,26 @@ export default function AutomacoesPage({ clinic, clinics, onChangeClinic }) {
           <p style={{ margin:'4px 0 0', fontSize:13, color:'#6B7280' }}>Configure o comportamento automático do WhatsApp por clínica</p>
         </div>
         <div style={{ display:'flex', gap:6 }}>
-          {(clinics||[]).map(c=>(
-            <button key={c.id} onClick={()=>onChangeClinic(c)} style={{ padding:'5px 14px', borderRadius:99, fontSize:12, fontWeight:600, cursor:'pointer', border:clinic?.id===c.id?'1.5px solid #0F0F0F':'1.5px solid #E5E7EB', background:clinic?.id===c.id?'#0F0F0F':'#fff', color:clinic?.id===c.id?'#fff':'#374151', fontFamily:'inherit', transition:'all 0.15s' }}>{c.name}</button>
-          ))}
+          {(clinics||[]).map(c => {
+            const isAtual = clinic?.id === c.id
+            return (
+              <button key={c.id}
+                onClick={isAtual ? undefined : () => onChangeClinic(c)}
+                disabled={!isAtual}
+                style={{
+                  padding:'5px 14px', borderRadius:99, fontSize:12, fontWeight:600,
+                  cursor: isAtual ? 'default' : 'not-allowed',
+                  border: isAtual ? '1.5px solid #0F0F0F' : '1.5px solid #E5E7EB',
+                  background: isAtual ? '#0F0F0F' : '#F9FAFB',
+                  color: isAtual ? '#fff' : '#D1D5DB',
+                  fontFamily:'inherit', transition:'all 0.15s',
+                  opacity: isAtual ? 1 : 0.4,
+                  pointerEvents: isAtual ? 'auto' : 'none',
+                }}>
+                {c.name}
+              </button>
+            )
+          })}
         </div>
       </div>
 
@@ -498,6 +629,7 @@ export default function AutomacoesPage({ clinic, clinics, onChangeClinic }) {
         {tab==='horario' && <HorarioTab clinicId={clinic?.id} />}
         {tab==='scripts' && <ScriptsTab clinicId={clinic?.id} />}
         {tab==='ia'      && <IATab clinicId={clinic?.id} />}
+        {tab==='n8n'     && <N8nTab clinicId={clinic?.id} />}
         {tab==='logs'    && <LogsTab clinicId={clinic?.id} />}
       </div>
     </div>
