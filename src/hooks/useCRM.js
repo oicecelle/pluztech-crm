@@ -291,7 +291,7 @@ export function useDisparos(clinicId) {
     if (itensErr) return { error: 'Erro ao buscar leads do disparo: ' + itensErr.message }
     if (!itens?.length) return { error: 'Nenhum lead pendente encontrado neste disparo.' }
 
-    // 2. Buscar config Uazapi da clínica (instância + token)
+    // 2. Buscar config Uazapi da clínica (token)
     const { data: horario, error: horErr } = await supabase
       .from('horario_comercial')
       .select('instancia, uazapi_token, uazapi_base_url')
@@ -300,11 +300,33 @@ export function useDisparos(clinicId) {
       .limit(1)
       .single()
 
-    if (horErr || !horario?.instancia || !horario?.uazapi_token) {
-      return { error: 'Configure a instância e o Token da Uazapi em Automações → Horário Comercial antes de disparar.' }
+    if (horErr || !horario?.uazapi_token) {
+      return { error: 'Configure o Token da Uazapi em Automações → Horário Comercial antes de disparar.' }
     }
 
     const baseUrl = horario.uazapi_base_url || 'https://customix.uazapi.com'
+
+    // 2b. Descobrir o nome técnico da instância via API
+    let instanciaNome = horario.instancia || ''
+    try {
+      const fetchResp = await fetch(`${baseUrl}/instance/fetchInstances`, {
+        method: 'GET',
+        headers: { 'apikey': horario.uazapi_token },
+      })
+      if (fetchResp.ok) {
+        const fetchData = await fetchResp.json()
+        // A API retorna array de instâncias — pega a primeira (token é por instância)
+        const inst = Array.isArray(fetchData) ? fetchData[0] : fetchData
+        const nome = inst?.instance?.instanceName || inst?.instanceName || inst?.name || inst?.instance?.name
+        if (nome) instanciaNome = nome
+      }
+    } catch (_) {
+      // Se não conseguir descobrir, usa o valor salvo no banco
+    }
+
+    if (!instanciaNome) {
+      return { error: 'Não foi possível identificar a instância Uazapi. Verifique o token em Automações → Horário Comercial.' }
+    }
 
     // 3. Buscar config de intervalo do disparo
     const { data: disparoData } = await supabase
@@ -329,7 +351,7 @@ export function useDisparos(clinicId) {
       onProgress?.({ total: itens.length, enviados, erros, idx: i, atual: item })
 
       try {
-        const instancia = encodeURIComponent(horario.instancia)
+        const instancia = encodeURIComponent(instanciaNome)
         const res = await fetch(`${baseUrl}/message/sendText/${instancia}`, {
           method: 'POST',
           headers: {

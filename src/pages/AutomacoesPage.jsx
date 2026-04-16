@@ -158,7 +158,7 @@ const HorarioTab = ({ clinicId }) => {
           <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:12 }}>
             <div style={{ flex:1 }}>
               <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
-                <span style={{ fontSize:13, fontWeight:700, color:D.text, fontFamily:'monospace' }}>{h.instancia}</span>
+                <span style={{ fontSize:13, fontWeight:700, color:h.instancia?D.text:D.sub, fontFamily:'monospace' }}>{h.instancia || '(instância auto)'}</span>
                 <Badge label={h.ativo?'Ativo':'Inativo'} color={h.ativo?'#10B981':'#9CA3AF'} />
                 <Badge label={h.uazapi_token?'Token OK':'Sem token'} color={h.uazapi_token?'#10B981':'#EF4444'} />
               </div>
@@ -186,8 +186,10 @@ const HorarioTab = ({ clinicId }) => {
 
       <Modal open={showModal} onClose={()=>setShowModal(false)} title={editando?'Editar Horário':'Nova Configuração'}>
         <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
-          <Input label="INSTÂNCIA (nome no Uazapi)" value={form.instancia} onChange={v=>set('instancia',v)} placeholder="ex: femme_principal" />
-          <Input label="TOKEN DA UAZAPI (apikey)" value={form.uazapi_token||''} onChange={v=>set('uazapi_token',v)} placeholder="Cole aqui o token/apikey desta instância" />
+          <Input label="TOKEN DA UAZAPI (apikey) *" value={form.uazapi_token||''} onChange={v=>set('uazapi_token',v)} placeholder="Cole aqui o token/apikey desta instância" />
+          <div style={{ background:'#1e2a1e', border:'1px solid #2d4a2d', borderRadius:8, padding:'10px 14px', fontSize:12, color:'#86efac' }}>
+            O nome da instância é descoberto automaticamente pelo token. Você não precisa preencher manualmente.
+          </div>
           <Input label="URL BASE DA UAZAPI" value={form.uazapi_base_url||'https://customix.uazapi.com'} onChange={v=>set('uazapi_base_url',v)} placeholder="https://customix.uazapi.com" />
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
             <Input label="HORA INÍCIO" value={form.hora_inicio} onChange={v=>set('hora_inicio',v)} type="time" />
