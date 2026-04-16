@@ -463,7 +463,7 @@ const substituirVariaveis=(texto,lead)=>{
 }
 
 // ─── DISPARO MODAL ───────────────────────────────────────────
-function DisparoModal({leads,selected,templates,onClose,onConfirm}){
+function DisparoModal({leads,selected,templates,onClose,onCreateDisparo,onExecutarDisparo,onCancelarExecucao}){
   const leadsAlvo=leads.filter(l=>selected.includes(l.id))
   const [templateId,setTemplateId]=useState(templates[0]?.id||'')
   const [mensagemCustom,setMensagemCustom]=useState('')
@@ -471,11 +471,15 @@ function DisparoModal({leads,selected,templates,onClose,onConfirm}){
   const [agendadoPara,setAgendadoPara]=useState('')
   const [intervalo,setIntervalo]=useState('aleatorio')
   const [intervaloFixo,setIntervaloFixo]=useState(60)
-  const [saving,setSaving]=useState(false)
   const [previewIdx,setPreviewIdx]=useState(0)
 
-  const VARIAVEIS=['{{nome}}','{{sobrenome}}','{{data}}','{{horario}}','{{procedimento}}','{{local}}','{{valor}}']
+  // Fases: 'config' | 'executando' | 'concluido'
+  const [fase,setFase]=useState('config')
+  const [progresso,setProgresso]=useState({total:0,enviados:0,erros:0,idx:0,atual:null})
+  const [resultado,setResultado]=useState(null)
+  const [erroMsg,setErroMsg]=useState(null)
 
+  const VARIAVEIS=['{{nome}}','{{sobrenome}}','{{data}}','{{horario}}','{{procedimento}}','{{local}}','{{valor}}']
   const template=templates.find(t=>t.id===templateId)
   const textoBase=usarCustom?mensagemCustom:(template?.conteudo||'')
   const leadPreview=leadsAlvo[previewIdx]
@@ -483,10 +487,9 @@ function DisparoModal({leads,selected,templates,onClose,onConfirm}){
 
   const handleConfirm=async()=>{
     if(!textoBase.trim()){alert('Selecione um template ou escreva uma mensagem.');return}
-    setSaving(true)
     const msgPorLead={}
     leadsAlvo.forEach(l=>{msgPorLead[l.id]={whatsapp:l.whatsapp,mensagem:substituirVariaveis(textoBase,l)}})
-    const disparo={
+    const disparoData={
       template_id:usarCustom?null:templateId,
       mensagem_base:textoBase,
       agendado_para:agendadoPara||null,
@@ -494,15 +497,115 @@ function DisparoModal({leads,selected,templates,onClose,onConfirm}){
       intervalo_segundos:intervalo==='fixo'?intervaloFixo:null,
       status:'pendente',
     }
-    await onConfirm(disparo,selected,msgPorLead)
-    setSaving(false)
+
+    // Salvar no banco
+    const {data,error}=await onCreateDisparo(disparoData,selected,msgPorLead)
+    if(error){setErroMsg('Erro ao criar disparo: '+error.message);return}
+
+    // Se agendado: só salva, não executa agora
+    if(agendadoPara){
+      setResultado({agendado:true,agendadoPara,total:leadsAlvo.length})
+      setFase('concluido')
+      return
+    }
+
+    // Executar imediatamente
+    setFase('executando')
+    setProgresso({total:leadsAlvo.length,enviados:0,erros:0,idx:0,atual:null})
+    const res=await onExecutarDisparo(data.id,(prog)=>setProgresso(prog))
+    if(res?.error){setErroMsg(res.error);setFase('config');return}
+    setResultado(res)
+    setFase('concluido')
   }
 
-  const rowS={padding:'12px 0',borderBottom:`1px solid ${D.border}`,display:'flex',alignItems:'center',gap:10}
-  const btnToggle=(ativo)=>({padding:'5px 12px',borderRadius:8,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit',border:ativo?`1.5px solid ${D.accent}`:`1.5px solid ${D.border}`,background:ativo?D.accent+'22':'transparent',color:ativo?D.accent:D.sub})
+  const handleCancelar=()=>{
+    onCancelarExecucao?.()
+  }
 
+  const pct=progresso.total>0?Math.round((progresso.idx/progresso.total)*100):0
+  const btnToggle=(ativo)=>({padding:'5px 12px',borderRadius:8,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit',border:ativo?`1.5px solid ${D.accent}`:`1.5px solid ${D.border}`,background:ativo?D.accent+'22':'transparent',color:ativo?D.accent:D.sub})
+  const rowS={padding:'12px 0',borderBottom:`1px solid ${D.border}`,display:'flex',alignItems:'center',gap:10}
+
+  // ── Fase: executando ─────────────────────────────────────────
+  if(fase==='executando') return(
+    <Modal open onClose={()=>{}} title="Disparando mensagens..." width={480}>
+      <div style={{display:'flex',flexDirection:'column',gap:20,padding:'8px 0'}}>
+        <div style={{background:D.input,borderRadius:10,padding:16,border:`1px solid ${D.border}`}}>
+          <div style={{display:'flex',justifyContent:'space-between',marginBottom:8}}>
+            <span style={{fontSize:13,fontWeight:600,color:D.text}}>{progresso.idx} / {progresso.total} enviados</span>
+            <span style={{fontSize:13,fontWeight:700,color:D.accent}}>{pct}%</span>
+          </div>
+          <div style={{background:D.border,borderRadius:99,height:6,overflow:'hidden'}}>
+            <div style={{height:'100%',borderRadius:99,background:D.accent,width:pct+'%',transition:'width 0.4s ease'}}/>
+          </div>
+        </div>
+
+        <div style={{display:'flex',gap:16}}>
+          <div style={{flex:1,background:'#14532d22',border:'1px solid #22c55e33',borderRadius:10,padding:'12px 16px',textAlign:'center'}}>
+            <div style={{fontSize:22,fontWeight:800,color:D.success}}>{progresso.enviados}</div>
+            <div style={{fontSize:11,color:D.sub,marginTop:2}}>ENVIADOS</div>
+          </div>
+          <div style={{flex:1,background:D.danger+'18',border:`1px solid ${D.danger}33`,borderRadius:10,padding:'12px 16px',textAlign:'center'}}>
+            <div style={{fontSize:22,fontWeight:800,color:D.danger}}>{progresso.erros}</div>
+            <div style={{fontSize:11,color:D.sub,marginTop:2}}>ERROS</div>
+          </div>
+          <div style={{flex:1,background:D.input,border:`1px solid ${D.border}`,borderRadius:10,padding:'12px 16px',textAlign:'center'}}>
+            <div style={{fontSize:22,fontWeight:800,color:D.sub}}>{progresso.total-progresso.idx}</div>
+            <div style={{fontSize:11,color:D.sub,marginTop:2}}>RESTANTES</div>
+          </div>
+        </div>
+
+        {progresso.atual&&(
+          <div style={{fontSize:12,color:D.sub,textAlign:'center'}}>
+            Enviando para <strong style={{color:D.text}}>{progresso.atual.whatsapp}</strong>...
+          </div>
+        )}
+
+        <div style={{background:'#F59E0B18',border:'1px solid #F59E0B33',borderRadius:8,padding:'10px 14px',fontSize:12,color:'#F59E0B'}}>
+          Não feche esta janela enquanto o disparo estiver em andamento.
+        </div>
+
+        <div style={{display:'flex',justifyContent:'flex-end'}}>
+          <Btn variant="danger" size="sm" onClick={handleCancelar}>Interromper envio</Btn>
+        </div>
+      </div>
+    </Modal>
+  )
+
+  // ── Fase: concluído ──────────────────────────────────────────
+  if(fase==='concluido') return(
+    <Modal open onClose={onClose} title={resultado?.agendado?'Disparo agendado!':resultado?.cancelado?'Disparo interrompido':'Disparo concluído!'} width={440}>
+      <div style={{display:'flex',flexDirection:'column',gap:20,padding:'8px 0'}}>
+        {resultado?.agendado?(
+          <div style={{textAlign:'center',padding:16}}>
+            <div style={{fontSize:40,marginBottom:12}}>🗓</div>
+            <div style={{fontSize:15,fontWeight:700,color:D.text,marginBottom:6}}>Mensagens agendadas</div>
+            <div style={{fontSize:13,color:D.sub}}>{resultado.total} mensagens programadas para {new Date(resultado.agendadoPara).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</div>
+            <div style={{fontSize:12,color:'#F59E0B',marginTop:10}}>Para executar no horário, abra o sistema e clique em "Executar" no Histórico de Disparos.</div>
+          </div>
+        ):(
+          <div style={{display:'flex',gap:12}}>
+            <div style={{flex:1,background:'#14532d22',border:'1px solid #22c55e33',borderRadius:10,padding:'14px 16px',textAlign:'center'}}>
+              <div style={{fontSize:28,fontWeight:800,color:D.success}}>{resultado?.enviados??0}</div>
+              <div style={{fontSize:11,color:D.sub,marginTop:2}}>ENVIADOS</div>
+            </div>
+            <div style={{flex:1,background:D.danger+'18',border:`1px solid ${D.danger}33`,borderRadius:10,padding:'14px 16px',textAlign:'center'}}>
+              <div style={{fontSize:28,fontWeight:800,color:D.danger}}>{resultado?.erros??0}</div>
+              <div style={{fontSize:11,color:D.sub,marginTop:2}}>ERROS</div>
+            </div>
+          </div>
+        )}
+        <div style={{display:'flex',justifyContent:'flex-end'}}>
+          <Btn variant="primary" onClick={onClose}>Fechar</Btn>
+        </div>
+      </div>
+    </Modal>
+  )
+
+  // ── Fase: config (padrão) ────────────────────────────────────
   return(
     <Modal open onClose={onClose} title="Novo Disparo" width={720}>
+      {erroMsg&&<div style={{background:D.danger+'18',border:`1px solid ${D.danger}44`,borderRadius:8,padding:'10px 14px',fontSize:13,color:D.danger,marginBottom:16}}>{erroMsg}</div>}
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:20}}>
         <div style={{display:'flex',flexDirection:'column',gap:16}}>
           <div>
@@ -527,7 +630,6 @@ function DisparoModal({leads,selected,templates,onClose,onConfirm}){
                     <button key={v} onClick={()=>setMensagemCustom(c=>c+v)}
                       style={{padding:'2px 7px',borderRadius:5,fontSize:10,fontWeight:600,cursor:'pointer',border:`1px solid ${D.accent}44`,background:D.accent+'18',color:D.accent,fontFamily:'inherit'}}>{v}</button>
                   ))}
-                  <div style={{fontSize:10,color:D.sub,marginTop:4}}>Use {'{{nome}}'}, {'{{data}}'}, {'{{horario}}'}, {'{{procedimento}}'}, {'{{local}}'}, {'{{valor}}'}</div>
                 </div>
               </div>
             )}
@@ -588,10 +690,10 @@ function DisparoModal({leads,selected,templates,onClose,onConfirm}){
       </div>
 
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:24,paddingTop:16,borderTop:`1px solid ${D.border}`}}>
-        <span style={{fontSize:12,color:D.sub}}>{leadsAlvo.length} mensagem{leadsAlvo.length!==1?'s':''} serão criadas</span>
+        <span style={{fontSize:12,color:D.sub}}>{leadsAlvo.length} mensagem{leadsAlvo.length!==1?'s':''} {agendadoPara?'serão agendadas':'serão disparadas'}</span>
         <div style={{display:'flex',gap:10}}>
           <Btn variant="secondary" onClick={onClose}>Cancelar</Btn>
-          <Btn variant="primary" onClick={handleConfirm} disabled={saving||!textoBase.trim()}>{saving?'Criando...':'Criar disparo'}</Btn>
+          <Btn variant="primary" onClick={handleConfirm} disabled={!textoBase.trim()}>{agendadoPara?'Agendar disparo':'Disparar agora'}</Btn>
         </div>
       </div>
     </Modal>
@@ -599,7 +701,7 @@ function DisparoModal({leads,selected,templates,onClose,onConfirm}){
 }
 
 // ─── CRM INLINE ──────────────────────────────────────────────
-function CRMInline({ clinic, clinics, estagios, statusList, etiquetas, interesses, leads, leadsLoading, createLead, updateLead, templates, createTemplate, deleteTemplate, createDisparo, configActions }) {
+function CRMInline({ clinic, clinics, estagios, statusList, etiquetas, interesses, leads, leadsLoading, createLead, updateLead, templates, createTemplate, deleteTemplate, createDisparo, executarDisparo, cancelarExecucao, disparos, refetchDisparos, configActions }) {
   const [filters,setFilters]=useState({busca:'',estagio:'',status:'',etiqueta:'',interesse:'',dataInicio:'',dataFim:''})
   const [selected,setSelected]=useState([])
   const [openLead,setOpenLead]=useState(null)
@@ -608,8 +710,10 @@ function CRMInline({ clinic, clinics, estagios, statusList, etiquetas, interesse
   const [showConfig,setShowConfig]=useState(false)
   const [showModelos,setShowModelos]=useState(false)
   const [showImportar,setShowImportar]=useState(false)
+  const [showHistorico,setShowHistorico]=useState(false)
   const [saving,setSaving]=useState(false)
   const [toast,setToast]=useState(null)
+  const [executandoHistorico,setExecutandoHistorico]=useState(null) // disparoId em execução pelo histórico
 
   const showT=(msg,type='success')=>{setToast({msg,type});setTimeout(()=>setToast(null),3000)}
 
@@ -766,8 +870,71 @@ function CRMInline({ clinic, clinics, estagios, statusList, etiquetas, interesse
         </div>
       </div>
 
+      {/* Histórico de Disparos */}
+      <div style={{marginTop:24}}>
+        <button onClick={()=>setShowHistorico(h=>!h)}
+          style={{display:'flex',alignItems:'center',gap:8,background:'none',border:'none',cursor:'pointer',padding:0,marginBottom:showHistorico?14:0}}>
+          <span style={{fontSize:13,fontWeight:700,color:D.sub,letterSpacing:'0.04em'}}>HISTÓRICO DE DISPAROS</span>
+          <span style={{fontSize:11,color:D.sub}}>{showHistorico?'▲':'▼'}</span>
+          {disparos?.length>0&&<span style={{fontSize:11,background:D.input,color:D.sub,borderRadius:99,padding:'1px 8px',marginLeft:4}}>{disparos.length}</span>}
+        </button>
+        {showHistorico&&(
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+            {(!disparos||disparos.length===0)&&<div style={{fontSize:13,color:D.sub,padding:'12px 0'}}>Nenhum disparo criado ainda.</div>}
+            {(disparos||[]).map(d=>{
+              const statusColor={'pendente':'#F59E0B','enviando':D.accent,'completo':D.success,'erro':D.danger,'cancelado':D.sub}[d.status]||D.sub
+              const isPendente=d.status==='pendente'||d.status==='cancelado'
+              const isExecutando=executandoHistorico===d.id
+              return(
+                <div key={d.id} style={{background:D.card,border:`1px solid ${D.border}`,borderRadius:10,padding:'12px 16px',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+                  <div style={{flex:1,minWidth:200}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
+                      <span style={{background:statusColor+'22',color:statusColor,border:`1px solid ${statusColor}44`,borderRadius:99,padding:'2px 10px',fontSize:11,fontWeight:700}}>{d.status}</span>
+                      <span style={{fontSize:12,color:D.sub}}>{new Date(d.created_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</span>
+                      {d.agendado_para&&<span style={{fontSize:11,color:'#F59E0B'}}>Agendado: {new Date(d.agendado_para).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</span>}
+                    </div>
+                    <div style={{fontSize:12,color:D.text,fontStyle:'italic',maxWidth:400,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>"{d.mensagem_base?.slice(0,80)}{d.mensagem_base?.length>80?'…':''}"</div>
+                    <div style={{fontSize:11,color:D.sub,marginTop:4,display:'flex',gap:12}}>
+                      <span>Total: <strong style={{color:D.text}}>{d.total_leads}</strong></span>
+                      {d.total_enviados!=null&&<span>Enviados: <strong style={{color:D.success}}>{d.total_enviados}</strong></span>}
+                      {d.total_erros>0&&<span>Erros: <strong style={{color:D.danger}}>{d.total_erros}</strong></span>}
+                      <span>Intervalo: <strong style={{color:D.text}}>{d.intervalo_tipo==='aleatorio'?'Aleatório (1–4min)':`${d.intervalo_segundos}s`}</strong></span>
+                    </div>
+                  </div>
+                  {isPendente&&(
+                    <Btn variant="primary" size="sm" disabled={isExecutando} onClick={async()=>{
+                      setExecutandoHistorico(d.id)
+                      showT(`Iniciando disparo de ${d.total_leads} leads...`)
+                      const res=await executarDisparo(d.id,(prog)=>{
+                        // progress tracked internally, just refresh on done
+                      })
+                      setExecutandoHistorico(null)
+                      if(res?.error) showT(res.error,'error')
+                      else showT(`Concluído! ${res.enviados} enviados, ${res.erros} erros.`,res.erros>0&&res.enviados===0?'error':'success')
+                      refetchDisparos?.()
+                    }}>{isExecutando?'Executando...':'Executar'}</Btn>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
       {(openLead||showNewLead)&&<LeadModal lead={openLead} onClose={()=>{setOpenLead(null);setShowNewLead(false)}} estagios={estagios} statusList={statusList} etiquetas={etiquetas} interesses={interesses} onSave={handleSaveLead} saving={saving}/>}
-      {showDisparo&&<DisparoModal leads={leads} selected={selected} templates={templates} onClose={()=>setShowDisparo(false)} onConfirm={async(disparo,ids,msgPorLead)=>{const{error}=await createDisparo(disparo,ids,msgPorLead);if(error)showT('Erro ao criar disparo: '+error.message,'error');else{showT(`Disparo criado para ${ids.length} lead(s)!`);setSelected([]);setShowDisparo(false)}}}/>}
+      {showDisparo&&<DisparoModal
+        leads={leads}
+        selected={selected}
+        templates={templates}
+        onClose={()=>{setShowDisparo(false)}}
+        onCreateDisparo={async(disparo,ids,msgPorLead)=>{
+          const res=await createDisparo(disparo,ids,msgPorLead)
+          if(!res.error) setSelected([])
+          return res
+        }}
+        onExecutarDisparo={executarDisparo}
+        onCancelarExecucao={cancelarExecucao}
+      />}
       {showConfig&&<CRMConfigModal onClose={()=>setShowConfig(false)} clinicId={clinic?.id} estagios={estagios} statusList={statusList} etiquetas={etiquetas} interesses={interesses} configActions={configActions}/>}
       {showModelos&&<ModelosModal onClose={()=>setShowModelos(false)} templates={templates} clinicId={clinic?.id} createTemplate={createTemplate} deleteTemplate={deleteTemplate}/>}
       {showImportar&&<ImportarLeadsModal onClose={()=>setShowImportar(false)} onImport={handleImportarLeads}/>}
@@ -798,7 +965,7 @@ export default function App() {
   const{estagios,statusList,etiquetas,interesses,...configActions}=useCRMConfig(clinicSelecionada?.id)
   const{leads,loading:leadsLoading,createLead,updateLead}=useLeads(clinicSelecionada?.id)
   const{templates,createTemplate,deleteTemplate}=useTemplates(clinicSelecionada?.id)
-  const{createDisparo}=useDisparos(clinicSelecionada?.id)
+  const{createDisparo,executarDisparo,cancelarExecucao,disparos,refetch:refetchDisparos}=useDisparos(clinicSelecionada?.id)
 
   if(authLoading) return(
     <div style={{minHeight:'100vh',background:D.bg,display:'flex',alignItems:'center',justifyContent:'center'}}>
@@ -865,6 +1032,10 @@ export default function App() {
       createTemplate={createTemplate}
       deleteTemplate={deleteTemplate}
       createDisparo={createDisparo}
+      executarDisparo={executarDisparo}
+      cancelarExecucao={cancelarExecucao}
+      disparos={disparos}
+      refetchDisparos={refetchDisparos}
       configActions={configActions}
     />
   )

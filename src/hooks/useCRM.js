@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 
 // ─────────────────────────────────────────
@@ -236,6 +236,8 @@ export function useTemplates(clinicId) {
 export function useDisparos(clinicId) {
   const [disparos, setDisparos] = useState([])
   const [loading, setLoading] = useState(true)
+  const [executando, setExecutando] = useState(false)
+  const cancelRef = useRef(false)
 
   const fetch = useCallback(async () => {
     if (!clinicId) return
@@ -252,7 +254,6 @@ export function useDisparos(clinicId) {
   useEffect(() => { fetch() }, [fetch])
 
   const createDisparo = async (disparo, leadsIds, mensagemPorLead) => {
-    // Cria o disparo
     const { data, error } = await supabase
       .from('disparos')
       .insert({ ...disparo, clinic_id: clinicId, total_leads: leadsIds.length })
@@ -260,7 +261,6 @@ export function useDisparos(clinicId) {
       .single()
     if (error) return { error }
 
-    // Cria os registros de cada lead
     if (leadsIds.length) {
       await supabase.from('disparo_leads').insert(
         leadsIds.map(lid => ({
@@ -277,7 +277,124 @@ export function useDisparos(clinicId) {
     return { data, error: null }
   }
 
-  return { disparos, loading, refetch: fetch, createDisparo }
+  // Busca os leads pendentes de um disparo e a config Uazapi da clínica,
+  // depois envia cada mensagem respeitando o intervalo configurado.
+  const executarDisparo = async (disparoId, onProgress) => {
+    // 1. Buscar itens pendentes
+    const { data: itens, error: itensErr } = await supabase
+      .from('disparo_leads')
+      .select('*')
+      .eq('disparo_id', disparoId)
+      .eq('status', 'pendente')
+      .order('id')
+
+    if (itensErr) return { error: 'Erro ao buscar leads do disparo: ' + itensErr.message }
+    if (!itens?.length) return { error: 'Nenhum lead pendente encontrado neste disparo.' }
+
+    // 2. Buscar config Uazapi da clínica (instância + token)
+    const { data: horario, error: horErr } = await supabase
+      .from('horario_comercial')
+      .select('instancia, uazapi_token, uazapi_base_url')
+      .eq('clinic_id', clinicId)
+      .eq('ativo', true)
+      .limit(1)
+      .single()
+
+    if (horErr || !horario?.instancia || !horario?.uazapi_token) {
+      return { error: 'Configure a instância e o Token da Uazapi em Automações → Horário Comercial antes de disparar.' }
+    }
+
+    const baseUrl = horario.uazapi_base_url || 'https://customix.uazapi.com'
+
+    // 3. Buscar config de intervalo do disparo
+    const { data: disparoData } = await supabase
+      .from('disparos')
+      .select('intervalo_tipo, intervalo_segundos')
+      .eq('id', disparoId)
+      .single()
+
+    // 4. Marcar disparo como 'enviando'
+    await supabase.from('disparos').update({ status: 'enviando' }).eq('id', disparoId)
+
+    setExecutando(true)
+    cancelRef.current = false
+
+    let enviados = 0
+    let erros = 0
+
+    for (let i = 0; i < itens.length; i++) {
+      if (cancelRef.current) break
+
+      const item = itens[i]
+      onProgress?.({ total: itens.length, enviados, erros, idx: i, atual: item })
+
+      try {
+        const res = await fetch(`${baseUrl}/message/sendText/${horario.instancia}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': horario.uazapi_token,
+          },
+          body: JSON.stringify({
+            number: item.whatsapp,
+            textMessage: { text: item.mensagem },
+          }),
+        })
+
+        if (res.ok) {
+          enviados++
+          await supabase.from('disparo_leads').update({
+            status: 'enviado',
+            enviado_em: new Date().toISOString(),
+          }).eq('id', item.id)
+        } else {
+          const errBody = await res.text().catch(() => res.status)
+          erros++
+          await supabase.from('disparo_leads').update({
+            status: 'erro',
+            erro_msg: String(errBody).slice(0, 300),
+          }).eq('id', item.id)
+        }
+      } catch (e) {
+        erros++
+        await supabase.from('disparo_leads').update({
+          status: 'erro',
+          erro_msg: e?.message || 'Erro de rede',
+        }).eq('id', item.id)
+      }
+
+      onProgress?.({ total: itens.length, enviados, erros, idx: i + 1, atual: null })
+
+      // Aguardar intervalo (exceto após o último)
+      if (i < itens.length - 1 && !cancelRef.current) {
+        const delayMs = disparoData?.intervalo_tipo === 'aleatorio'
+          ? Math.round((60 + Math.random() * 180) * 1000)   // 1 a 4 min
+          : (disparoData?.intervalo_segundos || 60) * 1000
+        await new Promise(r => setTimeout(r, delayMs))
+      }
+    }
+
+    // 5. Status final
+    const finalStatus = cancelRef.current
+      ? 'cancelado'
+      : erros > 0 && enviados === 0
+        ? 'erro'
+        : 'completo'
+
+    await supabase.from('disparos').update({
+      status: finalStatus,
+      total_enviados: enviados,
+      total_erros: erros,
+    }).eq('id', disparoId)
+
+    setExecutando(false)
+    await fetch()
+    return { enviados, erros, cancelado: cancelRef.current }
+  }
+
+  const cancelarExecucao = () => { cancelRef.current = true }
+
+  return { disparos, loading, executando, refetch: fetch, createDisparo, executarDisparo, cancelarExecucao }
 }
 
 // ─────────────────────────────────────────

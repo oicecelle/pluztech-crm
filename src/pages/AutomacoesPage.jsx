@@ -127,7 +127,7 @@ const HorarioTab = ({ clinicId }) => {
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState(null)
 
-  const blank = { instancia:'', hora_inicio:'08:00', hora_fim:'18:00', dias_semana:[1,2,3,4,5], mensagem_fora:'Olá! No momento estamos fora do horário de atendimento. Retornaremos em breve! 😊', ativo:true }
+  const blank = { instancia:'', uazapi_token:'', uazapi_base_url:'https://customix.uazapi.com', hora_inicio:'08:00', hora_fim:'18:00', dias_semana:[1,2,3,4,5], mensagem_fora:'Olá! No momento estamos fora do horário de atendimento. Retornaremos em breve! 😊', ativo:true }
   const [form, setForm] = useState(blank)
   const set = (k,v) => setForm(f=>({...f,[k]:v}))
   const toggleDia = d => set('dias_semana', (form.dias_semana||[]).includes(d) ? (form.dias_semana||[]).filter(x=>x!==d) : [...(form.dias_semana||[]),d])
@@ -160,6 +160,7 @@ const HorarioTab = ({ clinicId }) => {
               <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
                 <span style={{ fontSize:13, fontWeight:700, color:D.text, fontFamily:'monospace' }}>{h.instancia}</span>
                 <Badge label={h.ativo?'Ativo':'Inativo'} color={h.ativo?'#10B981':'#9CA3AF'} />
+                <Badge label={h.uazapi_token?'Token OK':'Sem token'} color={h.uazapi_token?'#10B981':'#EF4444'} />
               </div>
               <div style={{ display:'flex', gap:16, flexWrap:'wrap', marginBottom:12 }}>
                 <span style={{ fontSize:13, color:D.sub }}>🕐 {h.hora_inicio} – {h.hora_fim}</span>
@@ -185,7 +186,9 @@ const HorarioTab = ({ clinicId }) => {
 
       <Modal open={showModal} onClose={()=>setShowModal(false)} title={editando?'Editar Horário':'Nova Configuração'}>
         <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
-          <Input label="INSTÂNCIA (nome no Uazapi)" value={form.instancia} onChange={v=>set('instancia',v)} placeholder="ex: femme_principal" mono />
+          <Input label="INSTÂNCIA (nome no Uazapi)" value={form.instancia} onChange={v=>set('instancia',v)} placeholder="ex: femme_principal" />
+          <Input label="TOKEN DA UAZAPI (apikey)" value={form.uazapi_token||''} onChange={v=>set('uazapi_token',v)} placeholder="Cole aqui o token/apikey desta instância" />
+          <Input label="URL BASE DA UAZAPI" value={form.uazapi_base_url||'https://customix.uazapi.com'} onChange={v=>set('uazapi_base_url',v)} placeholder="https://customix.uazapi.com" />
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
             <Input label="HORA INÍCIO" value={form.hora_inicio} onChange={v=>set('hora_inicio',v)} type="time" />
             <Input label="HORA FIM" value={form.hora_fim} onChange={v=>set('hora_fim',v)} type="time" />
