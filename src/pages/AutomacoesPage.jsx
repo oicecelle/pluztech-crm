@@ -126,6 +126,35 @@ const HorarioTab = ({ clinicId }) => {
   const [editando, setEditando] = useState(null)
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState(null)
+  const [testeResult, setTesteResult] = useState(null)
+  const [testando, setTestando] = useState(false)
+
+  const testarConexao = async (h) => {
+    setTestando(true)
+    setTesteResult(null)
+    const base = h.uazapi_base_url || 'https://customix.uazapi.com'
+    const resultados = {}
+    const endpoints = [
+      { label: 'GET /instance/fetchInstances', method: 'GET', path: '/instance/fetchInstances' },
+      { label: 'GET /instance/info', method: 'GET', path: '/instance/info' },
+      { label: 'GET /instance/connectionState', method: 'GET', path: '/instance/connectionState' },
+      { label: 'GET /', method: 'GET', path: '/' },
+    ]
+    for (const ep of endpoints) {
+      try {
+        const r = await fetch(`${base}${ep.path}`, {
+          method: ep.method,
+          headers: { 'apikey': h.uazapi_token, 'Content-Type': 'application/json' },
+        })
+        const txt = await r.text().catch(() => '')
+        resultados[ep.label] = `${r.status} ${r.statusText} → ${txt.slice(0, 400)}`
+      } catch (e) {
+        resultados[ep.label] = `ERRO: ${e.message}`
+      }
+    }
+    setTesteResult(resultados)
+    setTestando(false)
+  }
 
   const blank = { instancia:'', uazapi_token:'', uazapi_base_url:'https://customix.uazapi.com', hora_inicio:'08:00', hora_fim:'18:00', dias_semana:[1,2,3,4,5], mensagem_fora:'Olá! No momento estamos fora do horário de atendimento. Retornaremos em breve! 😊', ativo:true }
   const [form, setForm] = useState(blank)
@@ -175,12 +204,28 @@ const HorarioTab = ({ clinicId }) => {
               </div>
             </div>
             <div style={{ display:'flex', gap:6 }}>
+              <Btn size="sm" variant="ghost" disabled={testando} onClick={()=>testarConexao(h)}>{testando?'Testando...':'Testar API'}</Btn>
               <Btn size="sm" variant="secondary" onClick={()=>{ setForm({...h}); setEditando(h.id); setShowModal(true) }}>Editar</Btn>
               <Btn size="sm" variant="danger" onClick={()=>remove(h.id)}>Excluir</Btn>
             </div>
           </div>
         </Card>
       ))}
+
+      {testeResult && (
+        <Card style={{ border:`1px solid ${D.accent}44` }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
+            <span style={{ fontSize:13, fontWeight:700, color:D.text }}>Resultado do Teste de Conexão</span>
+            <button onClick={()=>setTesteResult(null)} style={{ background:'none', border:'none', cursor:'pointer', fontSize:18, color:D.sub }}>×</button>
+          </div>
+          {Object.entries(testeResult).map(([label, val]) => (
+            <div key={label} style={{ marginBottom:10 }}>
+              <div style={{ fontSize:11, fontWeight:700, color:D.accent, marginBottom:3 }}>{label}</div>
+              <pre style={{ margin:0, fontSize:11, color:D.text, background:'#111', borderRadius:6, padding:'8px 10px', overflowX:'auto', whiteSpace:'pre-wrap', wordBreak:'break-all', border:`1px solid ${D.border}` }}>{val}</pre>
+            </div>
+          ))}
+        </Card>
+      )}
 
       {toast && <Toast msg={toast.msg} type={toast.type}/>}
 
