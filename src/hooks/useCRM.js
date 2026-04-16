@@ -308,24 +308,27 @@ export function useDisparos(clinicId) {
 
     // 2b. Descobrir o nome técnico da instância via API
     let instanciaNome = horario.instancia || ''
+    let fetchInstancesDebug = ''
     try {
       const fetchResp = await fetch(`${baseUrl}/instance/fetchInstances`, {
         method: 'GET',
         headers: { 'apikey': horario.uazapi_token },
       })
+      const fetchRaw = await fetchResp.text()
+      fetchInstancesDebug = `status:${fetchResp.status} body:${fetchRaw.slice(0, 300)}`
       if (fetchResp.ok) {
-        const fetchData = await fetchResp.json()
+        const fetchData = JSON.parse(fetchRaw)
         // A API retorna array de instâncias — pega a primeira (token é por instância)
         const inst = Array.isArray(fetchData) ? fetchData[0] : fetchData
         const nome = inst?.instance?.instanceName || inst?.instanceName || inst?.name || inst?.instance?.name
         if (nome) instanciaNome = nome
       }
-    } catch (_) {
-      // Se não conseguir descobrir, usa o valor salvo no banco
+    } catch (e) {
+      fetchInstancesDebug = `ERRO: ${e?.message}`
     }
 
     if (!instanciaNome) {
-      return { error: 'Não foi possível identificar a instância Uazapi. Verifique o token em Automações → Horário Comercial.' }
+      return { error: `Não foi possível identificar a instância Uazapi. fetchInstances debug: ${fetchInstancesDebug}` }
     }
 
     // 3. Buscar config de intervalo do disparo
@@ -352,7 +355,8 @@ export function useDisparos(clinicId) {
 
       try {
         const instancia = encodeURIComponent(instanciaNome)
-        const res = await fetch(`${baseUrl}/message/sendText/${instancia}`, {
+        const urlTentada = `${baseUrl}/message/sendText/${instancia}`
+        const res = await fetch(urlTentada, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -372,18 +376,18 @@ export function useDisparos(clinicId) {
             enviado_em: new Date().toISOString(),
           }).eq('id', item.id)
         } else {
-          const errBody = await res.text().catch(() => res.status)
+          const errBody = await res.text().catch(() => String(res.status))
           erros++
           await supabase.from('disparo_leads').update({
             status: 'erro',
-            erro_msg: String(errBody).slice(0, 300),
+            erro_msg: `URL: ${urlTentada} | instancia_descoberta: ${instanciaNome} | resp: ${String(errBody).slice(0, 200)}`,
           }).eq('id', item.id)
         }
       } catch (e) {
         erros++
         await supabase.from('disparo_leads').update({
           status: 'erro',
-          erro_msg: e?.message || 'Erro de rede',
+          erro_msg: `CATCH: ${e?.message || 'Erro de rede'} | instancia: ${instanciaNome}`,
         }).eq('id', item.id)
       }
 
