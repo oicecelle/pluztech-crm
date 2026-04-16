@@ -827,6 +827,8 @@ function CRMInline({ clinic, clinics, estagios, statusList, etiquetas, interesse
     // Timestamps: string vazia → null (Supabase rejeita "")
     if (!cleanForm.proximo_agendamento_data) cleanForm.proximo_agendamento_data = null
     if (!cleanForm.data_ultima_interacao) cleanForm.data_ultima_interacao = null
+    // WhatsApp vazio → null (coluna é NOT NULL no banco, remover via migration; por segurança trata aqui também)
+    if (!cleanForm.whatsapp) cleanForm.whatsapp = null
     const{error}=form.id?await updateLead(form.id,cleanForm):await createLead(cleanForm)
     setSaving(false)
     if(error){

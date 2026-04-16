@@ -18,7 +18,6 @@ CREATE TABLE IF NOT EXISTS horario_comercial (
   created_at      timestamptz DEFAULT now()
 );
 
--- Caso a tabela já existisse sem essas colunas, adiciona sem erro
 ALTER TABLE horario_comercial
   ADD COLUMN IF NOT EXISTS uazapi_token    text,
   ADD COLUMN IF NOT EXISTS uazapi_base_url text DEFAULT 'https://customix.uazapi.com';
@@ -69,46 +68,42 @@ CREATE TABLE IF NOT EXISTS automacao_logs (
   criado_em timestamptz DEFAULT now()
 );
 
--- ── 5. GARANTIR TODAS AS COLUNAS EM disparos E disparo_leads ──
--- Usa bloco DO para tratar colunas inesperadas com NOT NULL sem travar
+-- ── 5. CORRIGIR TABELA disparos ───────────────────────────────
 
-DO $$ BEGIN
-  -- Remove NOT NULL de colunas que o código não envia (criadas manualmente com schema diferente)
-  ALTER TABLE disparos ALTER COLUMN nome DROP NOT NULL;
-EXCEPTION WHEN undefined_column THEN NULL; END $$;
+-- 5a. Remover NOT NULL de colunas que o código não envia
+ALTER TABLE disparos ALTER COLUMN nome DROP NOT NULL;
+ALTER TABLE disparos ALTER COLUMN nome SET DEFAULT '';
 
-DO $$ BEGIN
-  ALTER TABLE disparos ALTER COLUMN descricao DROP NOT NULL;
-EXCEPTION WHEN undefined_column THEN NULL; END $$;
-
-DO $$ BEGIN
-  ALTER TABLE disparo_leads ALTER COLUMN nome DROP NOT NULL;
-EXCEPTION WHEN undefined_column THEN NULL; END $$;
-
--- Adiciona todas as colunas esperadas pelo código (sem erro se já existirem)
+-- 5b. Garantir colunas esperadas pelo código
 ALTER TABLE disparos
-  ADD COLUMN IF NOT EXISTS clinic_id           uuid REFERENCES clinics(id) ON DELETE CASCADE,
-  ADD COLUMN IF NOT EXISTS template_id         uuid REFERENCES message_templates(id) ON DELETE SET NULL,
-  ADD COLUMN IF NOT EXISTS mensagem_base        text,
-  ADD COLUMN IF NOT EXISTS agendado_para        timestamptz,
-  ADD COLUMN IF NOT EXISTS intervalo_tipo       text DEFAULT 'aleatorio',
-  ADD COLUMN IF NOT EXISTS intervalo_segundos   integer,
-  ADD COLUMN IF NOT EXISTS status               text DEFAULT 'pendente',
-  ADD COLUMN IF NOT EXISTS total_leads          integer DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS total_enviados       integer DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS total_erros          integer DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS created_at           timestamptz DEFAULT now();
+  ADD COLUMN IF NOT EXISTS mensagem_base      text,
+  ADD COLUMN IF NOT EXISTS agendado_para      timestamptz,
+  ADD COLUMN IF NOT EXISTS intervalo_tipo     text DEFAULT 'aleatorio',
+  ADD COLUMN IF NOT EXISTS intervalo_segundos integer,
+  ADD COLUMN IF NOT EXISTS total_enviados     integer DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS total_erros        integer DEFAULT 0;
 
+-- ── 6. CORRIGIR TABELA disparo_leads ─────────────────────────
+
+-- 6a. Remover NOT NULL de whatsapp (lead pode não ter número ainda)
+ALTER TABLE disparo_leads ALTER COLUMN whatsapp DROP NOT NULL;
+
+-- 6b. Garantir colunas esperadas pelo código
 ALTER TABLE disparo_leads
-  ADD COLUMN IF NOT EXISTS disparo_id  uuid REFERENCES disparos(id) ON DELETE CASCADE,
-  ADD COLUMN IF NOT EXISTS lead_id     uuid REFERENCES leads(id) ON DELETE CASCADE,
-  ADD COLUMN IF NOT EXISTS whatsapp    text,
-  ADD COLUMN IF NOT EXISTS mensagem    text,
-  ADD COLUMN IF NOT EXISTS status      text DEFAULT 'pendente',
-  ADD COLUMN IF NOT EXISTS enviado_em  timestamptz,
-  ADD COLUMN IF NOT EXISTS erro_msg    text;
+  ADD COLUMN IF NOT EXISTS disparo_id uuid REFERENCES disparos(id) ON DELETE CASCADE,
+  ADD COLUMN IF NOT EXISTS lead_id    uuid REFERENCES leads(id) ON DELETE CASCADE,
+  ADD COLUMN IF NOT EXISTS whatsapp   text,
+  ADD COLUMN IF NOT EXISTS mensagem   text,
+  ADD COLUMN IF NOT EXISTS status     text DEFAULT 'pendente',
+  ADD COLUMN IF NOT EXISTS enviado_em timestamptz,
+  ADD COLUMN IF NOT EXISTS erro_msg   text;
 
--- ── 6. RLS E POLÍTICAS ───────────────────────────────────────
+-- ── 7. CORRIGIR TABELA leads ──────────────────────────────────
+
+-- 7a. Remover NOT NULL de whatsapp em leads (campo pode ser preenchido depois)
+ALTER TABLE leads ALTER COLUMN whatsapp DROP NOT NULL;
+
+-- ── 8. RLS E POLÍTICAS ───────────────────────────────────────
 ALTER TABLE horario_comercial  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE auto_scripts       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE auto_script_partes ENABLE ROW LEVEL SECURITY;
