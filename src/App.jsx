@@ -449,17 +449,35 @@ const Login=({onLogin})=>{
 }
 
 // ─── VARIÁVEIS ────────────────────────────────────────────────
-// Suporta tanto {{nome}} (duplas) quanto {nome} (simples) para compatibilidade
-const substituirVariaveis=(texto,lead)=>{
+// Retorna os valores padrão de cada variável a partir dos dados do lead
+const defaultVarValues=(lead)=>({
+  nome: lead.nome||'',
+  sobrenome: lead.sobrenome||'',
+  procedimento: lead.proximo_agendamento_procedimento||'',
+  data: lead.proximo_agendamento_data?new Date(lead.proximo_agendamento_data).toLocaleDateString('pt-BR'):'',
+  horario: lead.proximo_agendamento_horario||'',
+  local: lead.proximo_agendamento_local||'',
+  valor: lead.valor?('R$ '+Number(lead.valor).toLocaleString('pt-BR')):'',
+})
+
+// Substitui variáveis usando overrides por lead (ou valor padrão do lead)
+const substituirVariaveis=(texto,lead,overrides={})=>{
   if(!texto||!lead) return texto||''
+  const v={...defaultVarValues(lead),...overrides}
   return texto
-    .replace(/\{\{nome\}\}|\{nome\}/gi, lead.nome||'')
-    .replace(/\{\{sobrenome\}\}|\{sobrenome\}/gi, lead.sobrenome||'')
-    .replace(/\{\{procedimento\}\}|\{procedimento\}/gi, lead.proximo_agendamento_procedimento||'')
-    .replace(/\{\{data\}\}|\{data\}/gi, lead.proximo_agendamento_data?new Date(lead.proximo_agendamento_data).toLocaleDateString('pt-BR'):'')
-    .replace(/\{\{horario\}\}|\{horario\}/gi, lead.proximo_agendamento_horario||'')
-    .replace(/\{\{local\}\}|\{local\}/gi, lead.proximo_agendamento_local||'')
-    .replace(/\{\{valor\}\}|\{valor\}/gi, lead.valor?('R$ '+Number(lead.valor).toLocaleString('pt-BR')):'')
+    .replace(/\{\{nome\}\}|\{nome\}/gi, v.nome)
+    .replace(/\{\{sobrenome\}\}|\{sobrenome\}/gi, v.sobrenome)
+    .replace(/\{\{procedimento\}\}|\{procedimento\}/gi, v.procedimento)
+    .replace(/\{\{data\}\}|\{data\}/gi, v.data)
+    .replace(/\{\{horario\}\}|\{horario\}/gi, v.horario)
+    .replace(/\{\{local\}\}|\{local\}/gi, v.local)
+    .replace(/\{\{valor\}\}|\{valor\}/gi, v.valor)
+}
+
+// Detecta quais variáveis estão sendo usadas em um texto
+const detectarVariaveis=(texto)=>{
+  const todas=['nome','sobrenome','data','horario','procedimento','local','valor']
+  return todas.filter(v=>new RegExp(`\\{\\{${v}\\}\\}|\\{${v}\\}`,'i').test(texto))
 }
 
 // ─── DISPARO MODAL ───────────────────────────────────────────
@@ -472,6 +490,13 @@ function DisparoModal({leads,selected,templates,onClose,onCreateDisparo,onExecut
   const [intervalo,setIntervalo]=useState('aleatorio')
   const [intervaloFixo,setIntervaloFixo]=useState(60)
   const [previewIdx,setPreviewIdx]=useState(0)
+  const [showVarTable,setShowVarTable]=useState(false)
+  // { [leadId]: { nome:'', horario:'', ... } } — overrides por lead
+  const [varValues,setVarValues]=useState(()=>{
+    const init={}
+    leads.filter(l=>selected.includes(l.id)).forEach(l=>{init[l.id]=defaultVarValues(l)})
+    return init
+  })
 
   // Fases: 'config' | 'executando' | 'concluido'
   const [fase,setFase]=useState('config')
@@ -482,13 +507,16 @@ function DisparoModal({leads,selected,templates,onClose,onCreateDisparo,onExecut
   const VARIAVEIS=['{{nome}}','{{sobrenome}}','{{data}}','{{horario}}','{{procedimento}}','{{local}}','{{valor}}']
   const template=templates.find(t=>t.id===templateId)
   const textoBase=usarCustom?mensagemCustom:(template?.conteudo||'')
+  const varsDetectadas=detectarVariaveis(textoBase)
   const leadPreview=leadsAlvo[previewIdx]
-  const msgPreview=substituirVariaveis(textoBase,leadPreview)
+  const msgPreview=substituirVariaveis(textoBase,leadPreview,varValues[leadPreview?.id])
+
+  const setVar=(leadId,varName,value)=>setVarValues(prev=>({...prev,[leadId]:{...prev[leadId],[varName]:value}}))
 
   const handleConfirm=async()=>{
     if(!textoBase.trim()){alert('Selecione um template ou escreva uma mensagem.');return}
     const msgPorLead={}
-    leadsAlvo.forEach(l=>{msgPorLead[l.id]={whatsapp:l.whatsapp,mensagem:substituirVariaveis(textoBase,l)}})
+    leadsAlvo.forEach(l=>{msgPorLead[l.id]={whatsapp:l.whatsapp,mensagem:substituirVariaveis(textoBase,l,varValues[l.id])}})
     const disparoData={
       template_id:usarCustom?null:templateId,
       mensagem_base:textoBase,
@@ -689,7 +717,56 @@ function DisparoModal({leads,selected,templates,onClose,onCreateDisparo,onExecut
         </div>
       </div>
 
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:24,paddingTop:16,borderTop:`1px solid ${D.border}`}}>
+      {/* Tabela de variáveis por lead */}
+      {textoBase&&varsDetectadas.length>0&&(
+        <div style={{marginTop:20,borderTop:`1px solid ${D.border}`,paddingTop:16}}>
+          <button onClick={()=>setShowVarTable(v=>!v)}
+            style={{display:'flex',alignItems:'center',gap:8,background:'none',border:'none',cursor:'pointer',padding:0,marginBottom:showVarTable?12:0,fontFamily:'inherit'}}>
+            <span style={{fontSize:11,fontWeight:700,color:D.sub,letterSpacing:'0.05em'}}>PERSONALIZAR VARIÁVEIS POR LEAD</span>
+            <span style={{fontSize:11,color:D.sub}}>{showVarTable?'▲':'▼'}</span>
+            <span style={{fontSize:11,color:D.accent,background:D.accent+'18',border:`1px solid ${D.accent}33`,borderRadius:99,padding:'1px 8px'}}>
+              {varsDetectadas.map(v=>`{{${v}}}`).join(' ')}
+            </span>
+          </button>
+          {showVarTable&&(
+            <div style={{overflowX:'auto'}}>
+              <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+                <thead>
+                  <tr>
+                    <th style={{padding:'7px 10px',textAlign:'left',fontWeight:700,color:D.sub,fontSize:11,letterSpacing:'0.05em',borderBottom:`1px solid ${D.border}`,background:D.cardAlt,whiteSpace:'nowrap'}}>LEAD</th>
+                    {varsDetectadas.map(v=>(
+                      <th key={v} style={{padding:'7px 10px',textAlign:'left',fontWeight:700,color:D.accent,fontSize:11,letterSpacing:'0.05em',borderBottom:`1px solid ${D.border}`,background:D.cardAlt,whiteSpace:'nowrap'}}>{`{{${v}}}`}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {leadsAlvo.map((l,i)=>(
+                    <tr key={l.id} style={{background:i===previewIdx?D.accent+'10':'transparent'}} onClick={()=>setPreviewIdx(i)}>
+                      <td style={{padding:'6px 10px',borderBottom:`1px solid ${D.border}22`,whiteSpace:'nowrap',cursor:'pointer'}}>
+                        <div style={{fontWeight:600,color:D.text}}>{l.nome} {l.sobrenome}</div>
+                        <div style={{fontSize:11,color:D.sub}}>{l.whatsapp}</div>
+                      </td>
+                      {varsDetectadas.map(varName=>(
+                        <td key={varName} style={{padding:'4px 6px',borderBottom:`1px solid ${D.border}22`}}>
+                          <input
+                            value={varValues[l.id]?.[varName]??''}
+                            onChange={e=>setVar(l.id,varName,e.target.value)}
+                            onClick={e=>e.stopPropagation()}
+                            placeholder={defaultVarValues(l)[varName]||`${varName}...`}
+                            style={{width:'100%',minWidth:90,border:`1px solid ${D.border}`,borderRadius:6,padding:'5px 8px',fontSize:12,background:D.input,color:D.text,outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:20,paddingTop:16,borderTop:`1px solid ${D.border}`}}>
         <span style={{fontSize:12,color:D.sub}}>{leadsAlvo.length} mensagem{leadsAlvo.length!==1?'s':''} {agendadoPara?'serão agendadas':'serão disparadas'}</span>
         <div style={{display:'flex',gap:10}}>
           <Btn variant="secondary" onClick={onClose}>Cancelar</Btn>
@@ -836,7 +913,7 @@ function CRMInline({ clinic, clinics, estagios, statusList, etiquetas, interesse
                     <tr key={lead.id} style={{background:isSel?D.accent+'12':'transparent',cursor:'pointer',transition:'background 0.1s'}}
                       onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background='rgba(255,255,255,0.03)'}}
                       onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background='transparent'}}>
-                      <td style={tdS} onClick={e=>{e.stopPropagation();toggle(lead.id)}}><input type="checkbox" checked={isSel} onChange={()=>toggle(lead.id)} style={{width:15,height:15,cursor:'pointer',accentColor:D.accent}}/></td>
+                      <td style={tdS} onClick={e=>{e.stopPropagation();toggle(lead.id)}}><input type="checkbox" checked={isSel} onChange={()=>toggle(lead.id)} onClick={e=>e.stopPropagation()} style={{width:15,height:15,cursor:'pointer',accentColor:D.accent}}/></td>
                       <td style={tdS} onClick={()=>setOpenLead(lead)}>
                         <div style={{fontWeight:600,fontSize:13,color:D.text}}>{lead.nome} {lead.sobrenome}</div>
                         {lead.aguardando_retorno&&<div style={{fontSize:10,color:'#F59E0B',fontWeight:600,marginTop:2}}>● Aguardando</div>}
