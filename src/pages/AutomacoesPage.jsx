@@ -133,21 +133,36 @@ const HorarioTab = ({ clinicId }) => {
     setTestando(true)
     setTesteResult(null)
     const base = h.uazapi_base_url || 'https://customix.uazapi.com'
+    const token = h.uazapi_token || ''
     const resultados = {}
-    const endpoints = [
-      { label: 'GET /instance/fetchInstances', method: 'GET', path: '/instance/fetchInstances' },
-      { label: 'GET /instance/info', method: 'GET', path: '/instance/info' },
-      { label: 'GET /instance/connectionState', method: 'GET', path: '/instance/connectionState' },
-      { label: 'GET /', method: 'GET', path: '/' },
+
+    // Tenta descobrir spec OpenAPI
+    const specEndpoints = [
+      { label: 'GET /api-json (OpenAPI spec)', method: 'GET', path: '/api-json' },
+      { label: 'GET /openapi.json', method: 'GET', path: '/openapi.json' },
+      { label: 'GET /docs/json', method: 'GET', path: '/docs/json' },
     ]
-    for (const ep of endpoints) {
+    // Tenta instância via token
+    const instEndpoints = [
+      { label: `GET /instance/fetchInstances`, method: 'GET', path: '/instance/fetchInstances' },
+      { label: `GET /instance/info/${token.slice(0,8)}...`, method: 'GET', path: `/instance/info/${token}` },
+      { label: `GET /instance/connectionState/${token.slice(0,8)}...`, method: 'GET', path: `/instance/connectionState/${token}` },
+    ]
+    // Testa o sendText com o próprio token como nome de instância
+    const sendEndpoints = [
+      { label: `POST /message/sendText/${token.slice(0,8)}... (token como instância)`, method: 'POST', path: `/message/sendText/${token}`, body: JSON.stringify({ number: '5521999999999', text: 'teste', textMessage: { text: 'teste' } }) },
+      { label: 'POST /message/sendText (sem instância)', method: 'POST', path: `/message/sendText`, body: JSON.stringify({ number: '5521999999999', text: 'teste' }) },
+    ]
+
+    for (const ep of [...specEndpoints, ...instEndpoints, ...sendEndpoints]) {
       try {
         const r = await fetch(`${base}${ep.path}`, {
           method: ep.method,
-          headers: { 'apikey': h.uazapi_token, 'Content-Type': 'application/json' },
+          headers: { 'apikey': token, 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+          ...(ep.body ? { body: ep.body } : {}),
         })
         const txt = await r.text().catch(() => '')
-        resultados[ep.label] = `${r.status} ${r.statusText} → ${txt.slice(0, 400)}`
+        resultados[ep.label] = `${r.status} → ${txt.slice(0, 300)}`
       } catch (e) {
         resultados[ep.label] = `ERRO: ${e.message}`
       }
