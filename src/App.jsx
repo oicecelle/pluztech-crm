@@ -740,12 +740,16 @@ function CRMInline({ clinic, clinics, estagios, statusList, etiquetas, interesse
     setSaving(true)
     // Limpa campos opcionais vazios para evitar erro de FK no Supabase
     const cleanForm = { ...form }
+    // FKs e números: vazio → null
     if (!cleanForm.estagio_id) cleanForm.estagio_id = null
     if (!cleanForm.status_id) cleanForm.status_id = null
     if (!cleanForm.email) cleanForm.email = null
     if (!cleanForm.valor) cleanForm.valor = null
     if (!cleanForm.valor_sinal) cleanForm.valor_sinal = null
     if (!cleanForm.numero_sessoes) cleanForm.numero_sessoes = null
+    // Timestamps: string vazia → null (Supabase rejeita "")
+    if (!cleanForm.proximo_agendamento_data) cleanForm.proximo_agendamento_data = null
+    if (!cleanForm.data_ultima_interacao) cleanForm.data_ultima_interacao = null
     const{error}=form.id?await updateLead(form.id,cleanForm):await createLead(cleanForm)
     setSaving(false)
     if(error){
