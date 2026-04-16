@@ -239,7 +239,7 @@ export function useDisparos(clinicId) {
   const [executando, setExecutando] = useState(false)
   const cancelRef = useRef(false)
 
-  const fetch = useCallback(async () => {
+  const carregarDisparos = useCallback(async () => {
     if (!clinicId) return
     setLoading(true)
     const { data, error } = await supabase
@@ -251,7 +251,7 @@ export function useDisparos(clinicId) {
     setLoading(false)
   }, [clinicId])
 
-  useEffect(() => { fetch() }, [fetch])
+  useEffect(() => { carregarDisparos() }, [carregarDisparos])
 
   const createDisparo = async (disparo, leadsIds, mensagemPorLead) => {
     const { data, error } = await supabase
@@ -273,7 +273,7 @@ export function useDisparos(clinicId) {
       )
     }
 
-    await fetch()
+    await carregarDisparos()
     return { data, error: null }
   }
 
@@ -388,13 +388,13 @@ export function useDisparos(clinicId) {
     }).eq('id', disparoId)
 
     setExecutando(false)
-    await fetch()
+    await carregarDisparos()
     return { enviados, erros, cancelado: cancelRef.current }
   }
 
   const cancelarExecucao = () => { cancelRef.current = true }
 
-  return { disparos, loading, executando, refetch: fetch, createDisparo, executarDisparo, cancelarExecucao }
+  return { disparos, loading, executando, refetch: carregarDisparos, createDisparo, executarDisparo, cancelarExecucao }
 }
 
 // ─────────────────────────────────────────
