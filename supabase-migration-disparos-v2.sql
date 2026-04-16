@@ -74,8 +74,11 @@ ALTER TABLE disparo_leads
   ADD COLUMN IF NOT EXISTS erro_msg text;
 
 ALTER TABLE disparos
-  ADD COLUMN IF NOT EXISTS total_enviados integer DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS total_erros    integer DEFAULT 0;
+  ADD COLUMN IF NOT EXISTS agendado_para     timestamptz,
+  ADD COLUMN IF NOT EXISTS intervalo_tipo    text DEFAULT 'aleatorio',
+  ADD COLUMN IF NOT EXISTS intervalo_segundos integer,
+  ADD COLUMN IF NOT EXISTS total_enviados    integer DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS total_erros       integer DEFAULT 0;
 
 -- ── 6. RLS E POLÍTICAS ───────────────────────────────────────
 ALTER TABLE horario_comercial  ENABLE ROW LEVEL SECURITY;
