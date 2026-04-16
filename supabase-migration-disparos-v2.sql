@@ -70,20 +70,37 @@ CREATE TABLE IF NOT EXISTS automacao_logs (
 );
 
 -- ── 5. GARANTIR TODAS AS COLUNAS EM disparos E disparo_leads ──
--- (ADD COLUMN IF NOT EXISTS não dá erro se a coluna já existir)
+-- Usa bloco DO para tratar colunas inesperadas com NOT NULL sem travar
 
+DO $$ BEGIN
+  -- Remove NOT NULL de colunas que o código não envia (criadas manualmente com schema diferente)
+  ALTER TABLE disparos ALTER COLUMN nome DROP NOT NULL;
+EXCEPTION WHEN undefined_column THEN NULL; END $$;
+
+DO $$ BEGIN
+  ALTER TABLE disparos ALTER COLUMN descricao DROP NOT NULL;
+EXCEPTION WHEN undefined_column THEN NULL; END $$;
+
+DO $$ BEGIN
+  ALTER TABLE disparo_leads ALTER COLUMN nome DROP NOT NULL;
+EXCEPTION WHEN undefined_column THEN NULL; END $$;
+
+-- Adiciona todas as colunas esperadas pelo código (sem erro se já existirem)
 ALTER TABLE disparos
-  ADD COLUMN IF NOT EXISTS template_id        uuid REFERENCES message_templates(id) ON DELETE SET NULL,
-  ADD COLUMN IF NOT EXISTS mensagem_base       text,
-  ADD COLUMN IF NOT EXISTS agendado_para       timestamptz,
-  ADD COLUMN IF NOT EXISTS intervalo_tipo      text DEFAULT 'aleatorio',
-  ADD COLUMN IF NOT EXISTS intervalo_segundos  integer,
-  ADD COLUMN IF NOT EXISTS status              text DEFAULT 'pendente',
-  ADD COLUMN IF NOT EXISTS total_leads         integer DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS total_enviados      integer DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS total_erros         integer DEFAULT 0;
+  ADD COLUMN IF NOT EXISTS clinic_id           uuid REFERENCES clinics(id) ON DELETE CASCADE,
+  ADD COLUMN IF NOT EXISTS template_id         uuid REFERENCES message_templates(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS mensagem_base        text,
+  ADD COLUMN IF NOT EXISTS agendado_para        timestamptz,
+  ADD COLUMN IF NOT EXISTS intervalo_tipo       text DEFAULT 'aleatorio',
+  ADD COLUMN IF NOT EXISTS intervalo_segundos   integer,
+  ADD COLUMN IF NOT EXISTS status               text DEFAULT 'pendente',
+  ADD COLUMN IF NOT EXISTS total_leads          integer DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS total_enviados       integer DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS total_erros          integer DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS created_at           timestamptz DEFAULT now();
 
 ALTER TABLE disparo_leads
+  ADD COLUMN IF NOT EXISTS disparo_id  uuid REFERENCES disparos(id) ON DELETE CASCADE,
   ADD COLUMN IF NOT EXISTS lead_id     uuid REFERENCES leads(id) ON DELETE CASCADE,
   ADD COLUMN IF NOT EXISTS whatsapp    text,
   ADD COLUMN IF NOT EXISTS mensagem    text,
