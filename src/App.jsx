@@ -523,7 +523,7 @@ function DisparoModal({leads,selected,templates,onClose,onCreateDisparo,onExecut
       agendado_para:agendadoPara||null,
       intervalo_tipo:intervalo,
       intervalo_segundos:intervalo==='fixo'?intervaloFixo:null,
-      status:'pendente',
+      status:'rascunho',
     }
 
     // Salvar no banco
@@ -965,8 +965,8 @@ function CRMInline({ clinic, clinics, estagios, statusList, etiquetas, interesse
           <div style={{display:'flex',flexDirection:'column',gap:8}}>
             {(!disparos||disparos.length===0)&&<div style={{fontSize:13,color:D.sub,padding:'12px 0'}}>Nenhum disparo criado ainda.</div>}
             {(disparos||[]).map(d=>{
-              const statusColor={'pendente':'#F59E0B','enviando':D.accent,'completo':D.success,'erro':D.danger,'cancelado':D.sub}[d.status]||D.sub
-              const isPendente=d.status==='pendente'||d.status==='cancelado'
+              const statusColor={'rascunho':'#F59E0B','pendente':'#F59E0B','enviando':D.accent,'completo':D.success,'erro':D.danger,'cancelado':D.sub}[d.status]||D.sub
+              const isPendente=['rascunho','pendente','cancelado'].includes(d.status)
               const isExecutando=executandoHistorico===d.id
               return(
                 <div key={d.id} style={{background:D.card,border:`1px solid ${D.border}`,borderRadius:10,padding:'12px 16px',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>

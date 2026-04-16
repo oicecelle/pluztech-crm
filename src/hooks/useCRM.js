@@ -285,7 +285,7 @@ export function useDisparos(clinicId) {
       .from('disparo_leads')
       .select('*')
       .eq('disparo_id', disparoId)
-      .eq('status', 'pendente')
+      .in('status', ['pendente', 'rascunho'])
       .order('id')
 
     if (itensErr) return { error: 'Erro ao buscar leads do disparo: ' + itensErr.message }

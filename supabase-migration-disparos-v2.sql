@@ -74,6 +74,9 @@ CREATE TABLE IF NOT EXISTS automacao_logs (
 ALTER TABLE disparos ALTER COLUMN nome DROP NOT NULL;
 ALTER TABLE disparos ALTER COLUMN nome SET DEFAULT '';
 
+-- 5b. Remover check constraint de status (banco usava valores diferentes do código)
+ALTER TABLE disparos DROP CONSTRAINT IF EXISTS disparos_status_check;
+
 -- 5b. Garantir colunas esperadas pelo código
 ALTER TABLE disparos
   ADD COLUMN IF NOT EXISTS mensagem_base      text,
