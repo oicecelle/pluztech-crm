@@ -329,7 +329,8 @@ export function useDisparos(clinicId) {
       onProgress?.({ total: itens.length, enviados, erros, idx: i, atual: item })
 
       try {
-        const res = await fetch(`${baseUrl}/message/sendText/${horario.instancia}`, {
+        const instancia = encodeURIComponent(horario.instancia)
+        const res = await fetch(`${baseUrl}/message/sendText/${instancia}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -337,6 +338,7 @@ export function useDisparos(clinicId) {
           },
           body: JSON.stringify({
             number: item.whatsapp,
+            text: item.mensagem,
             textMessage: { text: item.mensagem },
           }),
         })
