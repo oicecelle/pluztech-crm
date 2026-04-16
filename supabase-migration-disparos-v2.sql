@@ -69,16 +69,27 @@ CREATE TABLE IF NOT EXISTS automacao_logs (
   criado_em timestamptz DEFAULT now()
 );
 
--- ── 5. NOVAS COLUNAS EM DISPARO_LEADS E DISPAROS ─────────────
-ALTER TABLE disparo_leads
-  ADD COLUMN IF NOT EXISTS erro_msg text;
+-- ── 5. GARANTIR TODAS AS COLUNAS EM disparos E disparo_leads ──
+-- (ADD COLUMN IF NOT EXISTS não dá erro se a coluna já existir)
 
 ALTER TABLE disparos
-  ADD COLUMN IF NOT EXISTS agendado_para     timestamptz,
-  ADD COLUMN IF NOT EXISTS intervalo_tipo    text DEFAULT 'aleatorio',
-  ADD COLUMN IF NOT EXISTS intervalo_segundos integer,
-  ADD COLUMN IF NOT EXISTS total_enviados    integer DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS total_erros       integer DEFAULT 0;
+  ADD COLUMN IF NOT EXISTS template_id        uuid REFERENCES message_templates(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS mensagem_base       text,
+  ADD COLUMN IF NOT EXISTS agendado_para       timestamptz,
+  ADD COLUMN IF NOT EXISTS intervalo_tipo      text DEFAULT 'aleatorio',
+  ADD COLUMN IF NOT EXISTS intervalo_segundos  integer,
+  ADD COLUMN IF NOT EXISTS status              text DEFAULT 'pendente',
+  ADD COLUMN IF NOT EXISTS total_leads         integer DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS total_enviados      integer DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS total_erros         integer DEFAULT 0;
+
+ALTER TABLE disparo_leads
+  ADD COLUMN IF NOT EXISTS lead_id     uuid REFERENCES leads(id) ON DELETE CASCADE,
+  ADD COLUMN IF NOT EXISTS whatsapp    text,
+  ADD COLUMN IF NOT EXISTS mensagem    text,
+  ADD COLUMN IF NOT EXISTS status      text DEFAULT 'pendente',
+  ADD COLUMN IF NOT EXISTS enviado_em  timestamptz,
+  ADD COLUMN IF NOT EXISTS erro_msg    text;
 
 -- ── 6. RLS E POLÍTICAS ───────────────────────────────────────
 ALTER TABLE horario_comercial  ENABLE ROW LEVEL SECURITY;
