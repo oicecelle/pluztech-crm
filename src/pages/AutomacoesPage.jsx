@@ -177,7 +177,7 @@ const HorarioTab = ({ clinicId }) => {
     setTestando(false)
   }
 
-  const blank = { instancia:'', uazapi_token:'', uazapi_base_url:'https://customix.uazapi.com', hora_inicio:'08:00', hora_fim:'18:00', dias_semana:[1,2,3,4,5], mensagem_fora:'Olá! No momento estamos fora do horário de atendimento. Retornaremos em breve! 😊', ativo:true }
+  const blank = { instancia:'', uazapi_token:'', uazapi_base_url:'https://customix.uazapi.com', n8n_webhook_url:'', hora_inicio:'08:00', hora_fim:'18:00', dias_semana:[1,2,3,4,5], mensagem_fora:'Olá! No momento estamos fora do horário de atendimento. Retornaremos em breve! 😊', ativo:true }
   const [form, setForm] = useState(blank)
   const set = (k,v) => setForm(f=>({...f,[k]:v}))
   const toggleDia = d => set('dias_semana', (form.dias_semana||[]).includes(d) ? (form.dias_semana||[]).filter(x=>x!==d) : [...(form.dias_semana||[]),d])
@@ -252,10 +252,11 @@ const HorarioTab = ({ clinicId }) => {
 
       <Modal open={showModal} onClose={()=>setShowModal(false)} title={editando?'Editar Horário':'Nova Configuração'}>
         <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
-          <Input label="TOKEN DA UAZAPI (apikey) *" value={form.uazapi_token||''} onChange={v=>set('uazapi_token',v)} placeholder="Cole aqui o token/apikey desta instância" />
+          <Input label="WEBHOOK N8N PARA DISPAROS (recomendado)" value={form.n8n_webhook_url||''} onChange={v=>set('n8n_webhook_url',v)} placeholder="https://...n8n.cloud/webhook/disparo-mensagem" />
           <div style={{ background:'#1e2a1e', border:'1px solid #2d4a2d', borderRadius:8, padding:'10px 14px', fontSize:12, color:'#86efac' }}>
-            O nome da instância é descoberto automaticamente pelo token. Você não precisa preencher manualmente.
+            Se preenchido, os disparos serão enviados via N8n (recomendado). O N8n deve receber <code style={{background:'#0a1a0a',padding:'1px 5px',borderRadius:4}}>{"{ number, message }"}</code> e encaminhar para a Uazapi.
           </div>
+          <Input label="TOKEN DA UAZAPI (apikey) — alternativo" value={form.uazapi_token||''} onChange={v=>set('uazapi_token',v)} placeholder="Usado somente se o webhook N8n não estiver configurado" />
           <Input label="URL BASE DA UAZAPI" value={form.uazapi_base_url||'https://customix.uazapi.com'} onChange={v=>set('uazapi_base_url',v)} placeholder="https://customix.uazapi.com" />
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
             <Input label="HORA INÍCIO" value={form.hora_inicio} onChange={v=>set('hora_inicio',v)} type="time" />

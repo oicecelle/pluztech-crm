@@ -291,44 +291,17 @@ export function useDisparos(clinicId) {
     if (itensErr) return { error: 'Erro ao buscar leads do disparo: ' + itensErr.message }
     if (!itens?.length) return { error: 'Nenhum lead pendente encontrado neste disparo.' }
 
-    // 2. Buscar config Uazapi da clínica (token)
+    // 2. Buscar config da clínica
     const { data: horario, error: horErr } = await supabase
       .from('horario_comercial')
-      .select('instancia, uazapi_token, uazapi_base_url')
+      .select('instancia, uazapi_token, uazapi_base_url, n8n_webhook_url')
       .eq('clinic_id', clinicId)
       .eq('ativo', true)
       .limit(1)
       .single()
 
-    if (horErr || !horario?.uazapi_token) {
-      return { error: 'Configure o Token da Uazapi em Automações → Horário Comercial antes de disparar.' }
-    }
-
-    const baseUrl = horario.uazapi_base_url || 'https://customix.uazapi.com'
-
-    // 2b. Descobrir o nome técnico da instância via API
-    let instanciaNome = horario.instancia || ''
-    let fetchInstancesDebug = ''
-    try {
-      const fetchResp = await fetch(`${baseUrl}/instance/fetchInstances`, {
-        method: 'GET',
-        headers: { 'apikey': horario.uazapi_token },
-      })
-      const fetchRaw = await fetchResp.text()
-      fetchInstancesDebug = `status:${fetchResp.status} body:${fetchRaw.slice(0, 300)}`
-      if (fetchResp.ok) {
-        const fetchData = JSON.parse(fetchRaw)
-        // A API retorna array de instâncias — pega a primeira (token é por instância)
-        const inst = Array.isArray(fetchData) ? fetchData[0] : fetchData
-        const nome = inst?.instance?.instanceName || inst?.instanceName || inst?.name || inst?.instance?.name
-        if (nome) instanciaNome = nome
-      }
-    } catch (e) {
-      fetchInstancesDebug = `ERRO: ${e?.message}`
-    }
-
-    if (!instanciaNome) {
-      return { error: `Não foi possível identificar a instância Uazapi. fetchInstances debug: ${fetchInstancesDebug}` }
+    if (horErr || (!horario?.uazapi_token && !horario?.n8n_webhook_url)) {
+      return { error: 'Configure o Token da Uazapi ou o Webhook N8n em Automações → Horário Comercial antes de disparar.' }
     }
 
     // 3. Buscar config de intervalo do disparo
@@ -344,6 +317,8 @@ export function useDisparos(clinicId) {
     setExecutando(true)
     cancelRef.current = false
 
+    const usarN8n = !!horario?.n8n_webhook_url
+
     let enviados = 0
     let erros = 0
 
@@ -354,20 +329,27 @@ export function useDisparos(clinicId) {
       onProgress?.({ total: itens.length, enviados, erros, idx: i, atual: item })
 
       try {
-        const instancia = encodeURIComponent(instanciaNome)
-        const urlTentada = `${baseUrl}/message/sendText/${instancia}`
-        const res = await fetch(urlTentada, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': horario.uazapi_token,
-          },
-          body: JSON.stringify({
-            number: item.whatsapp,
-            text: item.mensagem,
-            textMessage: { text: item.mensagem },
-          }),
-        })
+        let res
+        if (usarN8n) {
+          // Envia via webhook N8n
+          res = await fetch(horario.n8n_webhook_url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              number: item.whatsapp,
+              message: item.mensagem,
+            }),
+          })
+        } else {
+          // Envia direto para Uazapi
+          const baseUrl = horario.uazapi_base_url || 'https://customix.uazapi.com'
+          const instancia = encodeURIComponent(horario.instancia || '')
+          res = await fetch(`${baseUrl}/message/sendText/${instancia}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'apikey': horario.uazapi_token },
+            body: JSON.stringify({ number: item.whatsapp, text: item.mensagem, textMessage: { text: item.mensagem } }),
+          })
+        }
 
         if (res.ok) {
           enviados++
@@ -380,14 +362,14 @@ export function useDisparos(clinicId) {
           erros++
           await supabase.from('disparo_leads').update({
             status: 'erro',
-            erro_msg: `URL: ${urlTentada} | instancia_descoberta: ${instanciaNome} | resp: ${String(errBody).slice(0, 200)}`,
+            erro_msg: String(errBody).slice(0, 300),
           }).eq('id', item.id)
         }
       } catch (e) {
         erros++
         await supabase.from('disparo_leads').update({
           status: 'erro',
-          erro_msg: `CATCH: ${e?.message || 'Erro de rede'} | instancia: ${instanciaNome}`,
+          erro_msg: e?.message || 'Erro de rede',
         }).eq('id', item.id)
       }
 

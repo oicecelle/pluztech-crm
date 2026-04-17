@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS horario_comercial (
 
 ALTER TABLE horario_comercial
   ADD COLUMN IF NOT EXISTS uazapi_token    text,
-  ADD COLUMN IF NOT EXISTS uazapi_base_url text DEFAULT 'https://customix.uazapi.com';
+  ADD COLUMN IF NOT EXISTS uazapi_base_url text DEFAULT 'https://customix.uazapi.com',
+  ADD COLUMN IF NOT EXISTS n8n_webhook_url text;
 
 -- ── 2. SCRIPTS AUTOMÁTICOS ────────────────────────────────────
 CREATE TABLE IF NOT EXISTS auto_scripts (
