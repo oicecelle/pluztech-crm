@@ -1,8 +1,9 @@
 // Vercel Serverless Function — Fluxo de entrada WhatsApp → CRM
-// URL: https://pluztech.vercel.app/api/whatsapp-inbound
-import { createClient } from '@supabase/supabase-js'
+// URL: https://pluztech-crm.vercel.app/api/whatsapp-inbound
 
 export default async function handler(req, res) {
+  // Import dinâmico para compatibilidade ESM no Vercel
+  const { createClient } = await import('@supabase/supabase-js')
   // Só aceita POST
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
