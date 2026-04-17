@@ -337,23 +337,18 @@ export function useDisparos(clinicId) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               number: item.whatsapp,
-              message: item.mensagem,
+              text: item.mensagem,
               uazapi_url: horario.uazapi_base_url || 'https://customix.uazapi.com',
               uazapi_token: horario.uazapi_token,
             }),
           })
         } else {
-          // Envia direto para Uazapi — endpoint /send/text, header token
+          // Envia direto para Uazapi — endpoint /send/text, header token, JSON body
           const baseUrl = horario.uazapi_base_url || 'https://customix.uazapi.com'
-          const formBody = new URLSearchParams({
-            number: item.whatsapp,
-            text: item.mensagem,
-            delay: '1500',
-          })
           res = await fetch(`${baseUrl}/send/text`, {
             method: 'POST',
-            headers: { 'token': horario.uazapi_token, 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: formBody.toString(),
+            headers: { 'token': horario.uazapi_token, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ number: item.whatsapp, text: item.mensagem }),
           })
         }
 
