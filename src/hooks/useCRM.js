@@ -331,23 +331,29 @@ export function useDisparos(clinicId) {
       try {
         let res
         if (usarN8n) {
-          // Envia via webhook N8n
+          // Envia via webhook N8n — passa uazapi_url e token para o N8n repassar
           res = await fetch(horario.n8n_webhook_url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               number: item.whatsapp,
               message: item.mensagem,
+              uazapi_url: horario.uazapi_base_url || 'https://customix.uazapi.com',
+              uazapi_token: horario.uazapi_token,
             }),
           })
         } else {
-          // Envia direto para Uazapi
+          // Envia direto para Uazapi — endpoint /send/text, header token
           const baseUrl = horario.uazapi_base_url || 'https://customix.uazapi.com'
-          const instancia = encodeURIComponent(horario.instancia || '')
-          res = await fetch(`${baseUrl}/message/sendText/${instancia}`, {
+          const formBody = new URLSearchParams({
+            number: item.whatsapp,
+            text: item.mensagem,
+            delay: '1500',
+          })
+          res = await fetch(`${baseUrl}/send/text`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'apikey': horario.uazapi_token },
-            body: JSON.stringify({ number: item.whatsapp, text: item.mensagem, textMessage: { text: item.mensagem } }),
+            headers: { 'token': horario.uazapi_token, 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: formBody.toString(),
           })
         }
 
