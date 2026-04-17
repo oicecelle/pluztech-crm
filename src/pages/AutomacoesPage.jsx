@@ -132,41 +132,47 @@ const HorarioTab = ({ clinicId }) => {
   const testarConexao = async (h) => {
     setTestando(true)
     setTesteResult(null)
-    const base = h.uazapi_base_url || 'https://customix.uazapi.com'
     const token = h.uazapi_token || ''
     const resultados = {}
     const body = JSON.stringify({ number: '5521999999999', text: 'teste', textMessage: { text: 'teste' } })
+    const hdrs = { 'Content-Type': 'application/json', 'apikey': token }
 
-    const endpoints = [
-      // Descobrir métodos aceitos
-      { label: 'OPTIONS /message/sendText (métodos aceitos)', method: 'OPTIONS', path: '/message/sendText', headers: {} },
-      // Diferentes headers de autenticação
-      { label: 'POST /message/sendText — header: apikey', method: 'POST', path: '/message/sendText', headers: { 'apikey': token } },
-      { label: 'POST /message/sendText — header: Authorization Bearer', method: 'POST', path: '/message/sendText', headers: { 'Authorization': `Bearer ${token}` } },
-      { label: 'POST /message/sendText — header: x-api-key', method: 'POST', path: '/message/sendText', headers: { 'x-api-key': token } },
-      { label: 'POST /message/sendText — header: token', method: 'POST', path: '/message/sendText', headers: { 'token': token } },
-      // Caminhos alternativos
-      { label: 'POST /api/message/sendText', method: 'POST', path: '/api/message/sendText', headers: { 'apikey': token } },
-      { label: `POST /${token.slice(0,8)}.../message/sendText`, method: 'POST', path: `/${token}/message/sendText`, headers: { 'apikey': token } },
-      // GET para ver spec
-      { label: 'GET /swagger.json', method: 'GET', path: '/swagger.json', headers: {} },
-      { label: 'GET /v1/swagger.json', method: 'GET', path: '/v1/swagger.json', headers: {} },
+    // Testa múltiplos servidores possíveis
+    const servidores = [
+      'https://customix.uazapi.com',
+      'https://api.customix.uazapi.com',
+      'https://app.customix.uazapi.com',
+      'https://api.uazapi.com',
+      'https://app.uazapi.com',
     ]
 
-    for (const ep of endpoints) {
+    for (const srv of servidores) {
       try {
-        const r = await fetch(`${base}${ep.path}`, {
-          method: ep.method,
-          headers: { 'Content-Type': 'application/json', ...ep.headers },
-          ...(ep.method !== 'GET' && ep.method !== 'OPTIONS' ? { body } : {}),
+        const r = await fetch(`${srv}/message/sendText`, {
+          method: 'POST',
+          headers: hdrs,
+          body,
         })
         const txt = await r.text().catch(() => '')
-        const allow = r.headers.get('Allow') || r.headers.get('allow') || ''
-        resultados[ep.label] = `${r.status}${allow?' Allow:'+allow:''} → ${txt.slice(0, 250)}`
+        resultados[`POST ${srv}/message/sendText`] = `${r.status} → ${txt.slice(0, 200)}`
       } catch (e) {
-        resultados[ep.label] = `ERRO: ${e.message}`
+        resultados[`POST ${srv}/message/sendText`] = `ERRO: ${e.message}`
       }
     }
+
+    // Testa o servidor atual com GET no sendText (talvez seja GET?)
+    const base = h.uazapi_base_url || 'https://customix.uazapi.com'
+    try {
+      const r = await fetch(`${base}/message/sendText?number=5521999999999&text=teste`, {
+        method: 'GET',
+        headers: hdrs,
+      })
+      const txt = await r.text().catch(() => '')
+      resultados[`GET ${base}/message/sendText?number=...`] = `${r.status} → ${txt.slice(0, 200)}`
+    } catch (e) {
+      resultados[`GET ${base}/message/sendText?...`] = `ERRO: ${e.message}`
+    }
+
     setTesteResult(resultados)
     setTestando(false)
   }
