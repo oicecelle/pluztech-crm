@@ -135,34 +135,34 @@ const HorarioTab = ({ clinicId }) => {
     const base = h.uazapi_base_url || 'https://customix.uazapi.com'
     const token = h.uazapi_token || ''
     const resultados = {}
+    const body = JSON.stringify({ number: '5521999999999', text: 'teste', textMessage: { text: 'teste' } })
 
-    // Tenta descobrir spec OpenAPI
-    const specEndpoints = [
-      { label: 'GET /api-json (OpenAPI spec)', method: 'GET', path: '/api-json' },
-      { label: 'GET /openapi.json', method: 'GET', path: '/openapi.json' },
-      { label: 'GET /docs/json', method: 'GET', path: '/docs/json' },
-    ]
-    // Tenta instância via token
-    const instEndpoints = [
-      { label: `GET /instance/fetchInstances`, method: 'GET', path: '/instance/fetchInstances' },
-      { label: `GET /instance/info/${token.slice(0,8)}...`, method: 'GET', path: `/instance/info/${token}` },
-      { label: `GET /instance/connectionState/${token.slice(0,8)}...`, method: 'GET', path: `/instance/connectionState/${token}` },
-    ]
-    // Testa o sendText com o próprio token como nome de instância
-    const sendEndpoints = [
-      { label: `POST /message/sendText/${token.slice(0,8)}... (token como instância)`, method: 'POST', path: `/message/sendText/${token}`, body: JSON.stringify({ number: '5521999999999', text: 'teste', textMessage: { text: 'teste' } }) },
-      { label: 'POST /message/sendText (sem instância)', method: 'POST', path: `/message/sendText`, body: JSON.stringify({ number: '5521999999999', text: 'teste' }) },
+    const endpoints = [
+      // Descobrir métodos aceitos
+      { label: 'OPTIONS /message/sendText (métodos aceitos)', method: 'OPTIONS', path: '/message/sendText', headers: {} },
+      // Diferentes headers de autenticação
+      { label: 'POST /message/sendText — header: apikey', method: 'POST', path: '/message/sendText', headers: { 'apikey': token } },
+      { label: 'POST /message/sendText — header: Authorization Bearer', method: 'POST', path: '/message/sendText', headers: { 'Authorization': `Bearer ${token}` } },
+      { label: 'POST /message/sendText — header: x-api-key', method: 'POST', path: '/message/sendText', headers: { 'x-api-key': token } },
+      { label: 'POST /message/sendText — header: token', method: 'POST', path: '/message/sendText', headers: { 'token': token } },
+      // Caminhos alternativos
+      { label: 'POST /api/message/sendText', method: 'POST', path: '/api/message/sendText', headers: { 'apikey': token } },
+      { label: `POST /${token.slice(0,8)}.../message/sendText`, method: 'POST', path: `/${token}/message/sendText`, headers: { 'apikey': token } },
+      // GET para ver spec
+      { label: 'GET /swagger.json', method: 'GET', path: '/swagger.json', headers: {} },
+      { label: 'GET /v1/swagger.json', method: 'GET', path: '/v1/swagger.json', headers: {} },
     ]
 
-    for (const ep of [...specEndpoints, ...instEndpoints, ...sendEndpoints]) {
+    for (const ep of endpoints) {
       try {
         const r = await fetch(`${base}${ep.path}`, {
           method: ep.method,
-          headers: { 'apikey': token, 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-          ...(ep.body ? { body: ep.body } : {}),
+          headers: { 'Content-Type': 'application/json', ...ep.headers },
+          ...(ep.method !== 'GET' && ep.method !== 'OPTIONS' ? { body } : {}),
         })
         const txt = await r.text().catch(() => '')
-        resultados[ep.label] = `${r.status} → ${txt.slice(0, 300)}`
+        const allow = r.headers.get('Allow') || r.headers.get('allow') || ''
+        resultados[ep.label] = `${r.status}${allow?' Allow:'+allow:''} → ${txt.slice(0, 250)}`
       } catch (e) {
         resultados[ep.label] = `ERRO: ${e.message}`
       }
