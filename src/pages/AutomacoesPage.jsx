@@ -177,7 +177,7 @@ const HorarioTab = ({ clinicId }) => {
     setTestando(false)
   }
 
-  const blank = { instancia:'', uazapi_token:'', uazapi_base_url:'https://customix.uazapi.com', n8n_webhook_url:'', hora_inicio:'08:00', hora_fim:'18:00', dias_semana:[1,2,3,4,5], mensagem_fora:'Olá! No momento estamos fora do horário de atendimento. Retornaremos em breve! 😊', ativo:true }
+  const blank = { instancia:'', uazapi_token:'', uazapi_base_url:'https://customix.uazapi.com', n8n_webhook_url:'', hora_inicio:'08:00', hora_fim:'18:00', dias_semana:[1,2,3,4,5], mensagem_fora:'Olá! No momento estamos fora do horário de atendimento. Retornaremos em breve! 😊', ativo:true, grupo_whatsapp:'', grupo_relatorio:'', relatorio_periodicidade:'diario', relatorio_hora:'20:00' }
   const [form, setForm] = useState(blank)
   const set = (k,v) => setForm(f=>({...f,[k]:v}))
   const toggleDia = d => set('dias_semana', (form.dias_semana||[]).includes(d) ? (form.dias_semana||[]).filter(x=>x!==d) : [...(form.dias_semana||[]),d])
@@ -273,6 +273,21 @@ const HorarioTab = ({ clinicId }) => {
           <div>
             <label style={{ fontSize:11, fontWeight:700, color:D.sub, letterSpacing:'0.06em', display:'block', marginBottom:5 }}>MENSAGEM FORA DO HORÁRIO</label>
             <textarea value={form.mensagem_fora} onChange={e=>set('mensagem_fora',e.target.value)} rows={3} style={{ width:'100%', border:`1px solid ${D.border}`, borderRadius:8, padding:'9px 12px', fontSize:13, outline:'none', fontFamily:'inherit', background:D.input, color:D.text, resize:'vertical', boxSizing:'border-box' }} />
+          </div>
+          <div style={{ borderTop:`1px solid ${D.border}`, paddingTop:16, marginTop:4 }}>
+            <label style={{ fontSize:11, fontWeight:700, color:D.sub, letterSpacing:'0.06em', display:'block', marginBottom:10 }}>ALERTAS E RELATÓRIOS (WhatsApp)</label>
+            <div style={{ background:'#1a1408', border:'1px solid #3d2c00', borderRadius:8, padding:'10px 14px', fontSize:12, color:'#c9a227', marginBottom:12 }}>
+              💡 Coloque o JID do grupo do WhatsApp (ex: <code style={{background:'#0a1a0a',padding:'1px 5px',borderRadius:4}}>5521999@g.us</code>). Para descobrir, veja o chatid no webhook da Uazapi quando uma mensagem for enviada no grupo.
+            </div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:12 }}>
+              <Input label="GRUPO — ALERTAS SUPERVISÃO (JID)" value={form.grupo_whatsapp||''} onChange={v=>set('grupo_whatsapp',v)} placeholder="5521999000000@g.us" />
+              <Input label="GRUPO — RELATÓRIOS (JID)" value={form.grupo_relatorio||''} onChange={v=>set('grupo_relatorio',v)} placeholder="5521999000000@g.us" />
+            </div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+              <Sel label="PERIODICIDADE DO RELATÓRIO" value={form.relatorio_periodicidade||'diario'} onChange={v=>set('relatorio_periodicidade',v)}
+                options={[{value:'diario',label:'Diário'},{value:'semanal',label:'Semanal (segunda)'},{value:'quinzenal',label:'Quinzenal'},{value:'mensal',label:'Mensal (dia 1)'}]} />
+              <Input label="HORA DO RELATÓRIO DIÁRIO" value={form.relatorio_hora||'20:00'} onChange={v=>set('relatorio_hora',v)} type="time" />
+            </div>
           </div>
           <Toggle value={form.ativo} onChange={v=>set('ativo',v)} label="Ativo" />
           <div style={{ display:'flex', justifyContent:'flex-end', gap:8, paddingTop:8, borderTop:`1px solid ${D.border}` }}>
@@ -477,13 +492,29 @@ const IATab = ({ clinicId }) => {
         </div>
       </div>
 
+      <Input label="TOKEN CHATWOOT (API Access Token desta clínica)" value={form.chatwoot_token}
+        onChange={v=>set('chatwoot_token',v)} mono placeholder="Cole aqui o api_access_token do Chatwoot para esta clínica" />
+
       <div>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
-          <label style={{ fontSize:11, fontWeight:700, color:D.sub, letterSpacing:'0.06em' }}>SYSTEM PROMPT</label>
+          <label style={{ fontSize:11, fontWeight:700, color:D.sub, letterSpacing:'0.06em' }}>SYSTEM PROMPT — Conversacional (IA que responde o lead)</label>
           <span style={{ fontSize:11, color:D.sub }}>{(form.system_prompt||'').length} caracteres</span>
         </div>
-        <textarea value={form.system_prompt||''} onChange={e=>set('system_prompt',e.target.value)} rows={18}
+        <textarea value={form.system_prompt||''} onChange={e=>set('system_prompt',e.target.value)} rows={14}
           placeholder={`Escreva aqui as instruções completas para a IA:\n\n- Quem ela é e para qual clínica trabalha\n- Tom de voz e como deve se comunicar\n- O que pode e NÃO pode responder\n- Exemplos de perguntas e respostas ideais\n- O que fazer quando não souber responder\n\nIMPORTANTE: quando precisar transferir para humano, inclua [transferir] na resposta.`}
+          style={{ width:'100%', border:`1px solid ${D.border}`, borderRadius:10, padding:'12px 14px', fontSize:13, outline:'none', fontFamily:'monospace', background:D.input, color:D.text, resize:'vertical', boxSizing:'border-box', lineHeight:1.6 }} />
+      </div>
+
+      <div>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
+          <div>
+            <label style={{ fontSize:11, fontWeight:700, color:D.sub, letterSpacing:'0.06em' }}>SYSTEM PROMPT — Copiloto (sugestões para a assistente humana)</label>
+            <p style={{ margin:'3px 0 0', fontSize:11, color:D.sub }}>Se vazio, usa o prompt padrão do Copiloto. Customize para incluir particularidades desta clínica.</p>
+          </div>
+          <span style={{ fontSize:11, color:D.sub, flexShrink:0, marginLeft:12 }}>{(form.copiloto_system_prompt||'').length} caracteres</span>
+        </div>
+        <textarea value={form.copiloto_system_prompt||''} onChange={e=>set('copiloto_system_prompt',e.target.value)} rows={8}
+          placeholder={`Opcional. Se preenchido, substitui o prompt padrão do Copiloto.\n\nExemplo:\nVocê é um copiloto de vendas da Clínica Bella. Ajude a assistente a responder leads sobre botox, preenchimento e harmonização. Sempre seja acolhedora e mencione as promoções vigentes quando relevante.`}
           style={{ width:'100%', border:`1px solid ${D.border}`, borderRadius:10, padding:'12px 14px', fontSize:13, outline:'none', fontFamily:'monospace', background:D.input, color:D.text, resize:'vertical', boxSizing:'border-box', lineHeight:1.6 }} />
       </div>
 
@@ -671,33 +702,9 @@ export default function AutomacoesPage({ clinic, clinics, onChangeClinic }) {
 
   return (
     <div style={{ maxWidth:900, margin:'0 auto', padding:24 }}>
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:20, flexWrap:'wrap', gap:12 }}>
-        <div>
-          <h1 style={{ margin:0, fontSize:22, fontWeight:800, color:D.text, letterSpacing:'-0.03em' }}>Automações</h1>
-          <p style={{ margin:'4px 0 0', fontSize:13, color:D.sub }}>Configure o comportamento automático do WhatsApp por clínica</p>
-        </div>
-        <div style={{ display:'flex', gap:6 }}>
-          {(clinics||[]).map(c => {
-            const isAtual = clinic?.id === c.id
-            return (
-              <button key={c.id}
-                onClick={isAtual ? undefined : () => onChangeClinic(c)}
-                disabled={!isAtual}
-                style={{
-                  padding:'5px 14px', borderRadius:99, fontSize:12, fontWeight:600,
-                  cursor: isAtual ? 'default' : 'not-allowed',
-                  border: isAtual ? `1.5px solid ${D.accent}` : `1.5px solid ${D.border}`,
-                  background: isAtual ? D.accent : '#161616',
-                  color: isAtual ? '#fff' : D.sub,
-                  fontFamily:'inherit', transition:'all 0.15s',
-                  opacity: isAtual ? 1 : 0.4,
-                  pointerEvents: isAtual ? 'auto' : 'none',
-                }}>
-                {c.name}
-              </button>
-            )
-          })}
-        </div>
+      <div style={{ marginBottom:20 }}>
+        <h1 style={{ margin:0, fontSize:22, fontWeight:800, color:D.text, letterSpacing:'-0.03em' }}>Automações</h1>
+        <p style={{ margin:'4px 0 0', fontSize:13, color:D.sub }}>Configure o comportamento automático do WhatsApp — <strong style={{color:D.text}}>{clinic?.name || '...'}</strong></p>
       </div>
 
       <div style={{ background:D.card, border:`1px solid ${D.border}`, borderRadius:'12px 12px 0 0', borderBottom:'none', display:'flex', gap:0, overflowX:'auto' }}>

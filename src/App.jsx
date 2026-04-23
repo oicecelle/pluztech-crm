@@ -481,32 +481,36 @@ const detectarVariaveis=(texto)=>{
 }
 
 // ─── DISPARO MODAL ───────────────────────────────────────────
+const TIPO_PARTE_ICON_D = { texto:'💬', imagem:'🖼️', audio:'🎵', documento:'📄' }
 function DisparoModal({leads,selected,templates,onClose,onCreateDisparo,onExecutarDisparo,onCancelarExecucao}){
   const leadsAlvo=leads.filter(l=>selected.includes(l.id))
   const [templateId,setTemplateId]=useState(templates[0]?.id||'')
-  const [mensagemCustom,setMensagemCustom]=useState('')
   const [usarCustom,setUsarCustom]=useState(false)
+  // Partes do disparo: array de { id, tipo, conteudo, delay_ms }
+  const [partes,setPartes]=useState([{ id:'p1', tipo:'texto', conteudo:'', delay_ms:2000 }])
   const [agendadoPara,setAgendadoPara]=useState('')
   const [intervalo,setIntervalo]=useState('aleatorio')
   const [intervaloFixo,setIntervaloFixo]=useState(60)
   const [previewIdx,setPreviewIdx]=useState(0)
   const [showVarTable,setShowVarTable]=useState(false)
-  // { [leadId]: { nome:'', horario:'', ... } } — overrides por lead
   const [varValues,setVarValues]=useState(()=>{
     const init={}
     leads.filter(l=>selected.includes(l.id)).forEach(l=>{init[l.id]=defaultVarValues(l)})
     return init
   })
-
-  // Fases: 'config' | 'executando' | 'concluido'
   const [fase,setFase]=useState('config')
   const [progresso,setProgresso]=useState({total:0,enviados:0,erros:0,idx:0,atual:null})
   const [resultado,setResultado]=useState(null)
   const [erroMsg,setErroMsg]=useState(null)
 
-  const VARIAVEIS=['{{nome}}','{{sobrenome}}','{{data}}','{{horario}}','{{procedimento}}','{{local}}','{{valor}}']
+  const addParte=()=>setPartes(ps=>[...ps,{id:'p'+Date.now(),tipo:'texto',conteudo:'',delay_ms:2000}])
+  const remParte=id=>setPartes(ps=>ps.filter(p=>p.id!==id))
+  const updParte=(id,k,v)=>setPartes(ps=>ps.map(p=>p.id===id?{...p,[k]:v}:p))
+
+  // Para compatibilidade: textoBase = conteúdo da 1ª parte texto (preview de variáveis)
   const template=templates.find(t=>t.id===templateId)
-  const textoBase=usarCustom?mensagemCustom:(template?.conteudo||'')
+  const textoBase=usarCustom?(partes.find(p=>p.tipo==='texto')?.conteudo||''):(template?.conteudo||'')
+  const VARIAVEIS=['{{nome}}','{{sobrenome}}','{{data}}','{{horario}}','{{procedimento}}','{{local}}','{{valor}}']
   const varsDetectadas=detectarVariaveis(textoBase)
   const leadPreview=leadsAlvo[previewIdx]
   const msgPreview=substituirVariaveis(textoBase,leadPreview,varValues[leadPreview?.id])
@@ -514,12 +518,21 @@ function DisparoModal({leads,selected,templates,onClose,onCreateDisparo,onExecut
   const setVar=(leadId,varName,value)=>setVarValues(prev=>({...prev,[leadId]:{...prev[leadId],[varName]:value}}))
 
   const handleConfirm=async()=>{
-    if(!textoBase.trim()){alert('Selecione um template ou escreva uma mensagem.');return}
+    const partesValidas=usarCustom?partes.filter(p=>p.conteudo.trim()):[]
+    if(!usarCustom&&!textoBase.trim()){alert('Selecione um template ou escreva uma mensagem.');return}
+    if(usarCustom&&!partesValidas.length){alert('Adicione ao menos uma parte com conteúdo.');return}
     const msgPorLead={}
-    leadsAlvo.forEach(l=>{msgPorLead[l.id]={whatsapp:l.whatsapp,mensagem:substituirVariaveis(textoBase,l,varValues[l.id])}})
+    leadsAlvo.forEach(l=>{
+      const partesResolvidas=(usarCustom?partesValidas:[{tipo:'texto',conteudo:textoBase,delay_ms:0}]).map(p=>({
+        ...p,
+        conteudo:p.tipo==='texto'?substituirVariaveis(p.conteudo,l,varValues[l.id]):p.conteudo
+      }))
+      msgPorLead[l.id]={whatsapp:l.whatsapp,mensagem:partesResolvidas.map(p=>p.tipo==='texto'?p.conteudo:'['+p.tipo+'] '+p.conteudo).join('\n'),partes:partesResolvidas}
+    })
     const disparoData={
       template_id:usarCustom?null:templateId,
       mensagem_base:textoBase,
+      partes:usarCustom?partesValidas:null,
       agendado_para:agendadoPara||null,
       intervalo_tipo:intervalo,
       intervalo_segundos:intervalo==='fixo'?intervaloFixo:null,
@@ -649,16 +662,49 @@ function DisparoModal({leads,selected,templates,onClose,onCreateDisparo,onExecut
                 {templates.map(t=><option key={t.id} value={t.id}>{t.nome}</option>)}
               </select>
             ):(
-              <div>
-                <textarea value={mensagemCustom} onChange={e=>setMensagemCustom(e.target.value)} rows={5}
-                  placeholder={'Olá {{nome}}, tudo bem?\n\nUse {{nome}}, {{data}}, {{horario}}, {{procedimento}}, {{local}}, {{valor}}'}
-                  style={{width:'100%',border:`1px solid ${D.border}`,borderRadius:8,padding:'8px 12px',fontSize:13,outline:'none',fontFamily:'inherit',background:D.input,color:D.text,resize:'vertical',boxSizing:'border-box'}}/>
-                <div style={{display:'flex',gap:5,flexWrap:'wrap',marginTop:6}}>
-                  {VARIAVEIS.map(v=>(
-                    <button key={v} onClick={()=>setMensagemCustom(c=>c+v)}
-                      style={{padding:'2px 7px',borderRadius:5,fontSize:10,fontWeight:600,cursor:'pointer',border:`1px solid ${D.accent}44`,background:D.accent+'18',color:D.accent,fontFamily:'inherit'}}>{v}</button>
-                  ))}
-                </div>
+              <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                {partes.map((parte,idx)=>(
+                  <div key={parte.id} style={{background:'#161616',borderRadius:10,padding:12,border:`1px solid ${D.border}`}}>
+                    <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:8}}>
+                      <span style={{width:20,height:20,borderRadius:5,background:D.accent,color:'#fff',fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{idx+1}</span>
+                      <div style={{display:'flex',gap:4}}>
+                        {['texto','imagem','audio','documento'].map(t=>(
+                          <button key={t} onClick={()=>updParte(parte.id,'tipo',t)} style={{padding:'2px 8px',borderRadius:5,fontSize:10,fontWeight:600,cursor:'pointer',fontFamily:'inherit',border:parte.tipo===t?`1.5px solid ${D.accent}`:`1.5px solid ${D.border}`,background:parte.tipo===t?D.accent+'22':'transparent',color:parte.tipo===t?D.accent:D.sub}}>
+                            {TIPO_PARTE_ICON_D[t]} {t}
+                          </button>
+                        ))}
+                      </div>
+                      <div style={{flex:1}}/>
+                      {partes.length>1&&<button onClick={()=>remParte(parte.id)} style={{background:'none',border:'none',cursor:'pointer',color:D.sub,fontSize:15}}>✕</button>}
+                    </div>
+                    {parte.tipo==='texto'?(
+                      <>
+                        <textarea value={parte.conteudo} onChange={e=>updParte(parte.id,'conteudo',e.target.value)} rows={3}
+                          placeholder={'Olá {{nome}}! Use {{nome}}, {{data}}, {{horario}}, {{procedimento}}, {{local}}, {{valor}}'}
+                          style={{width:'100%',border:`1px solid ${D.border}`,borderRadius:8,padding:'8px 12px',fontSize:13,outline:'none',fontFamily:'inherit',background:D.input,color:D.text,resize:'vertical',boxSizing:'border-box'}}/>
+                        <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:5}}>
+                          {VARIAVEIS.map(v=>(
+                            <button key={v} onClick={()=>updParte(parte.id,'conteudo',c=>c+v)}
+                              style={{padding:'1px 6px',borderRadius:4,fontSize:10,fontWeight:600,cursor:'pointer',border:`1px solid ${D.accent}44`,background:D.accent+'18',color:D.accent,fontFamily:'inherit'}}>{v}</button>
+                          ))}
+                        </div>
+                      </>
+                    ):(
+                      <input value={parte.conteudo} onChange={e=>updParte(parte.id,'conteudo',e.target.value)}
+                        placeholder={`URL do ${parte.tipo} (https://...)`}
+                        style={{width:'100%',border:`1px solid ${D.border}`,borderRadius:8,padding:'8px 12px',fontSize:13,outline:'none',fontFamily:'monospace',background:D.input,color:D.text,boxSizing:'border-box'}}/>
+                    )}
+                    {idx<partes.length-1&&(
+                      <div style={{display:'flex',alignItems:'center',gap:6,marginTop:6}}>
+                        <span style={{fontSize:10,color:D.sub}}>Delay antes da próxima:</span>
+                        <input type="number" value={parte.delay_ms} onChange={e=>updParte(parte.id,'delay_ms',Number(e.target.value))} min={0} max={10000} step={500}
+                          style={{width:70,border:`1px solid ${D.border}`,borderRadius:5,padding:'3px 8px',fontSize:11,background:D.input,color:D.text,outline:'none',fontFamily:'inherit'}}/>
+                        <span style={{fontSize:10,color:D.sub}}>ms</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+                <button onClick={addParte} style={{padding:'7px 12px',borderRadius:8,fontSize:12,fontWeight:600,cursor:'pointer',border:`1px dashed ${D.border}`,background:'transparent',color:D.sub,fontFamily:'inherit',textAlign:'left'}}>+ Adicionar parte (texto, imagem, áudio ou documento)</button>
               </div>
             )}
           </div>

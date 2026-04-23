@@ -268,6 +268,7 @@ export function useDisparos(clinicId) {
           lead_id: lid,
           whatsapp: mensagemPorLead[lid]?.whatsapp,
           mensagem: mensagemPorLead[lid]?.mensagem,
+          partes: mensagemPorLead[lid]?.partes || null,
           status: 'pendente',
         }))
       )
@@ -330,40 +331,68 @@ export function useDisparos(clinicId) {
 
       try {
         let res
-        if (usarN8n) {
-          // Envia via webhook N8n — passa uazapi_url e token para o N8n repassar
-          res = await fetch(horario.n8n_webhook_url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              number: item.whatsapp,
-              text: item.mensagem,
-              uazapi_url: horario.uazapi_base_url || 'https://customix.uazapi.com',
-              uazapi_token: horario.uazapi_token,
-            }),
-          })
-        } else {
-          // Envia direto para Uazapi — endpoint /send/text, header token, JSON body
-          const baseUrl = horario.uazapi_base_url || 'https://customix.uazapi.com'
-          res = await fetch(`${baseUrl}/send/text`, {
-            method: 'POST',
-            headers: { 'token': horario.uazapi_token, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ number: item.whatsapp, text: item.mensagem }),
-          })
+        // Partes: se o item tiver partes (multi-msg/arquivo), enviar cada uma
+        const partesItem = item.partes || (item.mensagem ? [{ tipo: 'texto', conteudo: item.mensagem, delay_ms: 0 }] : [])
+        let erroDeEnvio = null
+
+        for (let pi = 0; pi < partesItem.length; pi++) {
+          const parte = partesItem[pi]
+          if (pi > 0 && parte.delay_ms > 0) await new Promise(r => setTimeout(r, parte.delay_ms))
+
+          if (usarN8n) {
+            res = await fetch(horario.n8n_webhook_url, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                number: item.whatsapp, tipo: parte.tipo, text: parte.conteudo, url: parte.conteudo,
+                uazapi_url: horario.uazapi_base_url || 'https://customix.uazapi.com',
+                uazapi_token: horario.uazapi_token,
+              }),
+            })
+          } else {
+            const baseUrl = horario.uazapi_base_url || 'https://customix.uazapi.com'
+            const tok = horario.uazapi_token
+            if (parte.tipo === 'texto') {
+              res = await fetch(`${baseUrl}/send/text`, {
+                method: 'POST',
+                headers: { 'token': tok, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ number: item.whatsapp, text: parte.conteudo }),
+              })
+            } else if (parte.tipo === 'imagem') {
+              res = await fetch(`${baseUrl}/send/image`, {
+                method: 'POST',
+                headers: { 'token': tok, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ number: item.whatsapp, url: parte.conteudo }),
+              })
+            } else if (parte.tipo === 'documento') {
+              res = await fetch(`${baseUrl}/send/document`, {
+                method: 'POST',
+                headers: { 'token': tok, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ number: item.whatsapp, url: parte.conteudo, fileName: parte.conteudo.split('/').pop() || 'arquivo' }),
+              })
+            } else if (parte.tipo === 'audio') {
+              res = await fetch(`${baseUrl}/send/audio`, {
+                method: 'POST',
+                headers: { 'token': tok, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ number: item.whatsapp, url: parte.conteudo }),
+              })
+            }
+          }
+          if (res && !res.ok) {
+            erroDeEnvio = await res.text().catch(() => String(res.status))
+            break
+          }
         }
 
-        if (res.ok) {
+        if (!erroDeEnvio) {
           enviados++
           await supabase.from('disparo_leads').update({
-            status: 'enviado',
-            enviado_em: new Date().toISOString(),
+            status: 'enviado', enviado_em: new Date().toISOString(),
           }).eq('id', item.id)
         } else {
-          const errBody = await res.text().catch(() => String(res.status))
           erros++
           await supabase.from('disparo_leads').update({
-            status: 'erro',
-            erro_msg: String(errBody).slice(0, 300),
+            status: 'erro', erro_msg: String(erroDeEnvio).slice(0, 300),
           }).eq('id', item.id)
         }
       } catch (e) {
