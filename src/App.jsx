@@ -92,7 +92,7 @@ const Dashboard=({leads})=>{
 }
 
 // ─── LEAD MODAL ──────────────────────────────────────────────
-const LeadModal=({lead,onClose,estagios,statusList,etiquetas,interesses,onSave,saving})=>{
+const LeadModal=({lead,onClose,estagios,statusList,etiquetas,interesses,onSave,saving,onDelete})=>{
   const blank={nome:'',sobrenome:'',whatsapp:'',email:'',origem:'',estagio_id:'',status_id:'',interesses:[],etiquetas:[],aguardando_retorno:false,fechou:false,sinal_pago:false,valor:'',valor_sinal:'',proximo_agendamento_data:'',proximo_agendamento_horario:'',proximo_agendamento_local:'',proximo_agendamento_procedimento:'',ultima_interacao_contexto:'',observacoes:'',como_conheceu:'',cidade_bairro:'',indicado_por:'',numero_sessoes:'',ja_foi_cliente:false}
   const [form,setForm]=useState(lead?{...lead}:blank)
   const [tab,setTab]=useState('dados')
@@ -102,6 +102,12 @@ const LeadModal=({lead,onClose,estagios,statusList,etiquetas,interesses,onSave,s
 
   const inputStyle={border:`1px solid ${D.border}`,borderRadius:8,padding:'9px 12px',fontSize:13,color:D.text,background:D.input,outline:'none',fontFamily:'inherit',width:'100%',boxSizing:'border-box'}
   const labelStyle={fontSize:12,fontWeight:600,color:D.sub,letterSpacing:'0.04em',display:'block',marginBottom:5}
+
+  const handleDelete = () => {
+    if(window.confirm('Tem certeza que deseja excluir este lead? Essa ação não pode ser desfeita.')) {
+      onDelete(lead.id)
+    }
+  }
 
   return(
     <Modal open onClose={onClose} title={lead?`${lead.nome} ${lead.sobrenome||''}`:'Novo Lead'} width={680}>
@@ -163,9 +169,14 @@ const LeadModal=({lead,onClose,estagios,statusList,etiquetas,interesses,onSave,s
         <Input label="Nº de sessões" value={form.numero_sessoes} onChange={v=>set('numero_sessoes',v)} type="number"/>
         <div style={{gridColumn:'1/-1'}}><label style={{display:'flex',alignItems:'center',gap:7,fontSize:13,color:D.text,cursor:'pointer'}}><input type="checkbox" checked={!!form.ja_foi_cliente} onChange={e=>set('ja_foi_cliente',e.target.checked)} style={{width:15,height:15,accentColor:D.accent}}/>Já foi cliente antes</label></div>
       </div>)}
-      <div style={{display:'flex',justifyContent:'flex-end',gap:10,marginTop:24,paddingTop:20,borderTop:`1px solid ${D.border}`}}>
-        <Btn variant="secondary" onClick={onClose}>Cancelar</Btn>
-        <Btn variant="primary" onClick={()=>onSave(form)} disabled={saving}>{saving?'Salvando...':'Salvar lead'}</Btn>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:24,paddingTop:20,borderTop:`1px solid ${D.border}`}}>
+        <div>
+          {lead && <Btn variant="danger" onClick={handleDelete} disabled={saving}>Excluir lead</Btn>}
+        </div>
+        <div style={{display:'flex',gap:10}}>
+          <Btn variant="secondary" onClick={onClose}>Cancelar</Btn>
+          <Btn variant="primary" onClick={()=>onSave(form)} disabled={saving}>{saving?'Salvando...':'Salvar lead'}</Btn>
+        </div>
       </div>
     </Modal>
   )
@@ -295,13 +306,16 @@ const ImportarLeadsModal=({onClose,onImport})=>{
 }
 
 // ─── CONFIGURAR CRM (Estágios, Status, Etiquetas, Interesses)
-const CRMConfigModal=({onClose,clinicId,estagios,statusList,etiquetas,interesses,configActions})=>{
+const CRMConfigModal=({onClose,clinic,updateClinic,deleteClinic,estagios,statusList,etiquetas,interesses,configActions})=>{
   const {addEstagio,addStatus,addEtiqueta,addInteresse,deleteEstagio,deleteStatus,deleteEtiqueta,deleteInteresse}=configActions
-  const [tab,setTab]=useState('estagios')
+  const [tab,setTab]=useState('geral')
   const [newNome,setNewNome]=useState('')
   const [newCor,setNewCor]=useState('#8B6F47')
+  const [clinicAtiva,setClinicAtiva]=useState(clinic?.ativo!==false)
+  const [clinicSaving,setClinicSaving]=useState(false)
 
   const tabData={
+    geral:{label:'Geral',data:[],hasCor:false},
     estagios:{label:'Estágios',data:estagios,add:()=>addEstagio(newNome,newCor),del:deleteEstagio,hasCor:true},
     status:{label:'Status',data:statusList,add:()=>addStatus(newNome,newCor),del:deleteStatus,hasCor:true},
     etiquetas:{label:'Etiquetas',data:etiquetas,add:()=>addEtiqueta(newNome,newCor),del:deleteEtiqueta,hasCor:true},
@@ -317,36 +331,83 @@ const CRMConfigModal=({onClose,clinicId,estagios,statusList,etiquetas,interesses
 
   const tabStyle=a=>({padding:'8px 14px',fontSize:12,fontWeight:600,cursor:'pointer',borderBottom:a?`2px solid ${D.accent}`:'2px solid transparent',color:a?D.text:D.sub,background:'none',border:'none',fontFamily:'inherit'})
 
+  const handleUpdateClinic = async () => {
+    setClinicSaving(true)
+    await updateClinic(clinic.id, { ativo: clinicAtiva })
+    setClinicSaving(false)
+  }
+
+  const handleDeleteClinic = async () => {
+    if (window.confirm('Atenção: Você está prestes a excluir esta clínica. TODOS os leads, configurações e disparos associados a ela serão apagados permanentemente. Tem certeza absoluta?')) {
+      if (window.confirm('Por favor, confirme novamente: Excluir a clínica ' + clinic.name + '?')) {
+        setClinicSaving(true)
+        const { error } = await deleteClinic(clinic.id)
+        setClinicSaving(false)
+        if (error) {
+          alert('Erro ao excluir clínica. O banco de dados pode estar bloqueando a exclusão devido a dependências (ON DELETE CASCADE ausente). Mensagem: ' + error.message)
+        } else {
+          onClose()
+          window.location.reload()
+        }
+      }
+    }
+  }
+
   return(
-    <Modal open onClose={onClose} title="Configurar CRM" width={560}>
+    <Modal open onClose={onClose} title="Configurar Clínica e CRM" width={560}>
       <div style={{display:'flex',borderBottom:`1px solid ${D.border}`,marginBottom:20,marginTop:-8}}>
         {Object.entries(tabData).map(([k,v])=><button key={k} style={tabStyle(tab===k)} onClick={()=>setTab(k)}>{v.label}</button>)}
       </div>
       <div style={{display:'flex',flexDirection:'column',gap:16}}>
-        <div style={{display:'flex',gap:8,alignItems:'flex-end'}}>
-          <div style={{flex:1}}>
-            <Input label={`Novo ${cur.label.slice(0,-1)}`} value={newNome} onChange={setNewNome} placeholder={`Nome do ${cur.label.slice(0,-1).toLowerCase()}`}/>
+        {tab === 'geral' ? (
+          <div style={{display:'flex',flexDirection:'column',gap:24}}>
+            <div style={{background:D.input,borderRadius:10,padding:16,border:`1px solid ${D.border}`}}>
+              <div style={{fontSize:13,fontWeight:700,color:D.text,marginBottom:8}}>Status da Clínica</div>
+              <label style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer',marginBottom:12}}>
+                <div onClick={()=>setClinicAtiva(!clinicAtiva)} style={{width:40,height:22,borderRadius:99,background:clinicAtiva?D.success:'#333',position:'relative',transition:'background 0.2s',flexShrink:0}}>
+                  <div style={{position:'absolute',top:3,left:clinicAtiva?21:3,width:16,height:16,borderRadius:'50%',background:'#fff',transition:'left 0.2s',boxShadow:'0 1px 3px rgba(0,0,0,0.4)'}}/>
+                </div>
+                <span style={{fontSize:13,color:D.text}}>{clinicAtiva ? 'Ativa (visível para todos)' : 'Inativa (oculta e desativada)'}</span>
+              </label>
+              <Btn onClick={handleUpdateClinic} disabled={clinicSaving}>{clinicSaving?'Salvando...':'Salvar Alteração'}</Btn>
+            </div>
+            
+            <div style={{background:D.danger+'11',borderRadius:10,padding:16,border:`1px solid ${D.danger}44`}}>
+              <div style={{fontSize:13,fontWeight:700,color:D.danger,marginBottom:4}}>Excluir Clínica</div>
+              <div style={{fontSize:12,color:D.sub,lineHeight:1.4,marginBottom:12}}>
+                Esta ação é irreversível e excluirá permanentemente todos os leads, configurações de CRM e automações relacionadas a esta clínica.
+              </div>
+              <Btn variant="danger" onClick={handleDeleteClinic} disabled={clinicSaving}>Excluir Clínica Permanentemente</Btn>
+            </div>
           </div>
-          {cur.hasCor&&(
-            <div style={{display:'flex',flexDirection:'column',gap:5}}>
-              <label style={{fontSize:12,fontWeight:600,color:D.sub}}>COR</label>
-              <input type="color" value={newCor} onChange={e=>setNewCor(e.target.value)}
-                style={{width:42,height:38,border:`1px solid ${D.border}`,borderRadius:8,cursor:'pointer',padding:3,background:D.input}}/>
+        ) : (
+          <>
+            <div style={{display:'flex',gap:8,alignItems:'flex-end'}}>
+              <div style={{flex:1}}>
+                <Input label={`Novo ${cur.label.slice(0,-1)}`} value={newNome} onChange={setNewNome} placeholder={`Nome do ${cur.label.slice(0,-1).toLowerCase()}`}/>
+              </div>
+              {cur.hasCor&&(
+                <div style={{display:'flex',flexDirection:'column',gap:5}}>
+                  <label style={{fontSize:12,fontWeight:600,color:D.sub}}>COR</label>
+                  <input type="color" value={newCor} onChange={e=>setNewCor(e.target.value)}
+                    style={{width:42,height:38,border:`1px solid ${D.border}`,borderRadius:8,cursor:'pointer',padding:3,background:D.input}}/>
+                </div>
+              )}
+              <Btn onClick={handleAdd}>Adicionar</Btn>
             </div>
-          )}
-          <Btn onClick={handleAdd}>Adicionar</Btn>
-        </div>
-        <div style={{display:'flex',flexDirection:'column',gap:6,maxHeight:320,overflowY:'auto'}}>
-          {cur.data.length===0&&<div style={{textAlign:'center',padding:24,color:D.sub,fontSize:13}}>Nenhum item cadastrado</div>}
-          {cur.data.map(item=>(
-            <div key={item.id} style={{display:'flex',alignItems:'center',gap:10,background:D.input,borderRadius:8,padding:'10px 12px',border:`1px solid ${D.border}`}}>
-              {cur.hasCor&&<div style={{width:14,height:14,borderRadius:'50%',background:item.cor,flexShrink:0}}/>}
-              <span style={{flex:1,fontSize:13,color:D.text,fontWeight:500}}>{item.nome}</span>
-              {cur.hasCor&&<span style={{fontSize:11,color:item.cor,background:item.cor+'18',borderRadius:99,padding:'1px 8px'}}>{item.cor}</span>}
-              <button onClick={()=>cur.del(item.id)} style={{background:'none',border:'none',cursor:'pointer',color:D.danger,fontSize:16,lineHeight:1}}>×</button>
+            <div style={{display:'flex',flexDirection:'column',gap:6,maxHeight:320,overflowY:'auto'}}>
+              {cur.data.length===0&&<div style={{textAlign:'center',padding:24,color:D.sub,fontSize:13}}>Nenhum item cadastrado</div>}
+              {cur.data.map(item=>(
+                <div key={item.id} style={{display:'flex',alignItems:'center',gap:10,background:D.input,borderRadius:8,padding:'10px 12px',border:`1px solid ${D.border}`}}>
+                  {cur.hasCor&&<div style={{width:14,height:14,borderRadius:'50%',background:item.cor,flexShrink:0}}/>}
+                  <span style={{flex:1,fontSize:13,color:D.text,fontWeight:500}}>{item.nome}</span>
+                  {cur.hasCor&&<span style={{fontSize:11,color:item.cor,background:item.cor+'18',borderRadius:99,padding:'1px 8px'}}>{item.cor}</span>}
+                  <button onClick={()=>cur.del(item.id)} style={{background:'none',border:'none',cursor:'pointer',color:D.danger,fontSize:16,lineHeight:1}}>×</button>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          </>
+        )}
       </div>
     </Modal>
   )
@@ -823,8 +884,165 @@ function DisparoModal({leads,selected,templates,onClose,onCreateDisparo,onExecut
   )
 }
 
+// ─── SEARCH HISTORY / FAVORITES (localStorage) ───────────────
+const SEARCH_HISTORY_KEY = 'pluz_search_history_clinic'
+const SEARCH_FAVS_KEY    = 'pluz_search_favs_clinic'
+
+function getHistory() {
+  try { return JSON.parse(localStorage.getItem(SEARCH_HISTORY_KEY) || '[]') } catch { return [] }
+}
+function saveHistory(q) {
+  if (!q.trim()) return
+  const prev = getHistory().filter(x => x !== q)
+  localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify([q, ...prev].slice(0, 10)))
+}
+function getFavs() {
+  try { return JSON.parse(localStorage.getItem(SEARCH_FAVS_KEY) || '[]') } catch { return [] }
+}
+function toggleFav(item) {
+  const favs = getFavs()
+  const key = item.type + ':' + item.id
+  const exists = favs.find(f => f.key === key)
+  if (exists) localStorage.setItem(SEARCH_FAVS_KEY, JSON.stringify(favs.filter(f => f.key !== key)))
+  else localStorage.setItem(SEARCH_FAVS_KEY, JSON.stringify([{ key, ...item }, ...favs]))
+  return !exists
+}
+function isFav(item) {
+  return !!getFavs().find(f => f.key === item.type + ':' + item.id)
+}
+
+// ─── CLINIC GLOBAL SEARCH ──────────────────────────────────────
+const ClinicGlobalSearch = ({ clinic }) => {
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState([])
+  const [history, setHistory] = useState(getHistory())
+  const [, forceUpdate] = useState(0)
+  const [open, setOpen] = useState(false)
+  const [searching, setSearching] = useState(false)
+  const ref = useRef(null)
+
+  useEffect(() => {
+    const onClickOut = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', onClickOut)
+    return () => document.removeEventListener('mousedown', onClickOut)
+  }, [])
+
+  const doSearch = async (q) => {
+    if (!q.trim() || !clinic) { setResults([]); return }
+    setSearching(true)
+    const [leadsRes, procRes, profRes, scriptRes, faqRes] = await Promise.all([
+      supabase.from('leads').select('id, nome, sobrenome, whatsapp').eq('clinic_id', clinic.id).or(`nome.ilike.%${q}%,sobrenome.ilike.%${q}%,whatsapp.ilike.%${q}%`).limit(5),
+      supabase.from('procedures').select('id, name').eq('clinic_id', clinic.id).ilike('name', `%${q}%`).limit(5),
+      supabase.from('professionals').select('id, name').eq('clinic_id', clinic.id).ilike('name', `%${q}%`).limit(5),
+      supabase.from('scripts').select('id, occasion').eq('clinic_id', clinic.id).ilike('occasion', `%${q}%`).limit(5),
+      supabase.from('faq').select('id, question').eq('clinic_id', clinic.id).ilike('question', `%${q}%`).limit(5),
+    ])
+    const grouped = []
+    if ((leadsRes.data||[]).length) grouped.push({ type: 'Leads', items: leadsRes.data.map(l => ({ type:'lead', id:l.id, label:`${l.nome} ${l.sobrenome||''}`, sub:l.whatsapp })) })
+    if ((procRes.data||[]).length) grouped.push({ type: 'Procedimentos', items: procRes.data.map(p => ({ type:'procedimento', id:p.id, label:p.name, sub:'Procedimento' })) })
+    if ((profRes.data||[]).length) grouped.push({ type: 'Profissionais', items: profRes.data.map(p => ({ type:'profissional', id:p.id, label:p.name, sub:'Profissional' })) })
+    if ((scriptRes.data||[]).length) grouped.push({ type: 'Scripts', items: scriptRes.data.map(s => ({ type:'script', id:s.id, label:s.occasion, sub:'Script' })) })
+    if ((faqRes.data||[]).length) grouped.push({ type: 'FAQ', items: faqRes.data.map(f => ({ type:'faq', id:f.id, label:f.question, sub:'Pergunta frequente' })) })
+    setResults(grouped)
+    setSearching(false)
+  }
+
+  useEffect(() => {
+    const t = setTimeout(() => { if (query) doSearch(query) }, 350)
+    return () => clearTimeout(t)
+  }, [query])
+
+  const handleSubmit = (q) => {
+    saveHistory(q || query)
+    setHistory(getHistory())
+  }
+
+  const favs = getFavs()
+
+  return (
+    <div ref={ref} style={{ position:'relative' }}>
+      <div style={{ display:'flex', alignItems:'center', gap:8, background:D.input, border:`1px solid ${D.border}`, borderRadius:10, padding:'6px 12px', minWidth:280 }}>
+        <span style={{ color:D.sub, fontSize:14 }}>🔍</span>
+        <input
+          value={query}
+          onChange={e => { setQuery(e.target.value); setOpen(true) }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={e => { if (e.key === 'Enter') handleSubmit(query) }}
+          placeholder="Busca global na clínica..."
+          style={{ background:'transparent', border:'none', outline:'none', fontSize:13, color:D.text, fontFamily:'inherit', flex:1 }}
+        />
+        {query && <button onClick={() => { setQuery(''); setResults([]) }} style={{ background:'none', border:'none', cursor:'pointer', color:D.sub, fontSize:16, lineHeight:1 }}>×</button>}
+      </div>
+
+      {open && (
+        <div style={{ position:'absolute', top:'calc(100% + 8px)', right:0, background:'#1a1a1a', border:`1px solid ${D.border}`, borderRadius:12, boxShadow:'0 20px 60px rgba(0,0,0,0.6)', zIndex:500, maxHeight:420, overflowY:'auto', minWidth:320 }}>
+          {searching && <div style={{ padding:'16px', textAlign:'center', color:D.sub, fontSize:13 }}>Buscando...</div>}
+          {!searching && query && results.length === 0 && (
+            <div style={{ padding:'16px', textAlign:'center', color:D.sub, fontSize:13 }}>Nenhum resultado para "{query}"</div>
+          )}
+          {!searching && results.map(group => (
+            <div key={group.type}>
+              <div style={{ padding:'8px 14px 4px', fontSize:10, fontWeight:700, color:D.sub, letterSpacing:'0.08em' }}>{group.type.toUpperCase()}</div>
+              {group.items.map(item => {
+                const faved = isFav(item)
+                return (
+                  <div key={item.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 14px', cursor:'pointer', transition:'background 0.15s' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:13, color:D.text, fontWeight:500 }}>{item.label}</div>
+                      {item.sub && <div style={{ fontSize:11, color:D.sub }}>{item.sub}</div>}
+                    </div>
+                    <button onClick={e => { e.stopPropagation(); toggleFav(item); forceUpdate(n => n+1) }}
+                      style={{ background:'none', border:'none', cursor:'pointer', fontSize:14, color: faved ? '#F59E0B' : D.sub }}>
+                      {faved ? '★' : '☆'}
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          ))}
+          {!query && (
+            <>
+              {favs.length > 0 && (
+                <div>
+                  <div style={{ padding:'8px 14px 4px', fontSize:10, fontWeight:700, color:'#F59E0B', letterSpacing:'0.08em' }}>FAVORITOS</div>
+                  {favs.slice(0, 5).map(f => (
+                    <div key={f.key} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 14px' }}>
+                      <span style={{ fontSize:11, color:'#F59E0B' }}>★</span>
+                      <span style={{ fontSize:13, color:D.text }}>{f.label}</span>
+                      {f.sub && <span style={{ fontSize:11, color:D.sub }}>{f.sub}</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {history.length > 0 && (
+                <div>
+                  <div style={{ padding:'8px 14px 4px', fontSize:10, fontWeight:700, color:D.sub, letterSpacing:'0.08em' }}>BUSCAS RECENTES</div>
+                  {history.map((h, i) => (
+                    <div key={i} onClick={() => { setQuery(h); doSearch(h) }}
+                      style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 14px', cursor:'pointer' }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                      <span style={{ fontSize:12, color:D.sub }}>↺</span>
+                      <span style={{ fontSize:13, color:D.text }}>{h}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {favs.length === 0 && history.length === 0 && (
+                <div style={{ padding:'16px', textAlign:'center', color:D.sub, fontSize:13 }}>Digite para buscar leads, procedimentos, profissionais, scripts e FAQ desta clínica</div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── CRM INLINE ──────────────────────────────────────────────
-function CRMInline({ clinic, clinics, estagios, statusList, etiquetas, interesses, leads, leadsLoading, createLead, updateLead, templates, createTemplate, deleteTemplate, createDisparo, executarDisparo, cancelarExecucao, disparos, refetchDisparos, configActions }) {
+function CRMInline({ clinic, clinics, estagios, statusList, etiquetas, interesses, leads, leadsLoading, createLead, updateLead, deleteLead, updateClinic, deleteClinic, templates, createTemplate, deleteTemplate, createDisparo, executarDisparo, cancelarExecucao, disparos, refetchDisparos, configActions }) {
   const [filters,setFilters]=useState({busca:'',estagio:'',status:'',etiqueta:'',interesse:'',dataInicio:'',dataFim:''})
   const [selected,setSelected]=useState([])
   const [openLead,setOpenLead]=useState(null)
@@ -858,6 +1076,18 @@ function CRMInline({ clinic, clinics, estagios, statusList, etiquetas, interesse
   const allSelected=filteredLeads.length>0&&selected.length===filteredLeads.length
   const toggleAll=()=>setSelected(allSelected?[]:filteredLeads.map(l=>l.id))
   const toggle=id=>setSelected(s=>s.includes(id)?s.filter(x=>x!==id):[...s,id])
+
+  const handleDeleteLead = async (id) => {
+    setSaving(true)
+    const { error } = await deleteLead(id)
+    setSaving(false)
+    if(error){
+      showT('Erro ao excluir lead: '+error.message, 'error')
+    } else {
+      showT('Lead excluído!')
+      setOpenLead(null)
+    }
+  }
 
   const handleSaveLead=async(form)=>{
     setSaving(true)
@@ -900,7 +1130,10 @@ function CRMInline({ clinic, clinics, estagios, statusList, etiquetas, interesse
     <div style={{fontFamily:"'DM Sans','Helvetica Neue',sans-serif"}}>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20,flexWrap:'wrap',gap:12}}>
-        <h2 style={{margin:0,fontSize:20,fontWeight:800,color:D.text,letterSpacing:'-0.02em'}}>CRM</h2>
+        <div style={{display:'flex',alignItems:'center',gap:16}}>
+          <h2 style={{margin:0,fontSize:20,fontWeight:800,color:D.text,letterSpacing:'-0.02em'}}>CRM</h2>
+          <ClinicGlobalSearch clinic={clinic} />
+        </div>
         <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
           {selected.length>0&&<Btn variant="secondary" size="sm" onClick={()=>setShowDisparo(true)}>📤 Disparar ({selected.length})</Btn>}
           <Btn variant="secondary" size="sm" onClick={()=>setShowImportar(true)}>📥 Importar</Btn>
@@ -916,7 +1149,7 @@ function CRMInline({ clinic, clinics, estagios, statusList, etiquetas, interesse
       {/* Filtros */}
       <div style={{background:D.card,border:`1px solid ${D.border}`,borderRadius:12,padding:'14px 16px',marginBottom:16,display:'flex',gap:10,flexWrap:'wrap',alignItems:'flex-end'}}>
         <div style={{display:'flex',flexDirection:'column',gap:4}}>
-          <label style={{fontSize:11,fontWeight:600,color:D.sub,letterSpacing:'0.04em'}}>BUSCAR</label>
+          <label style={{fontSize:11,fontWeight:600,color:D.sub,letterSpacing:'0.04em'}}>FILTRAR LEADS</label>
           <input placeholder="Nome ou número..." value={filters.busca} onChange={e=>setFilters(f=>({...f,busca:e.target.value}))}
             style={{border:`1px solid ${D.border}`,borderRadius:8,padding:'7px 11px',fontSize:13,outline:'none',fontFamily:'inherit',background:D.input,color:D.text,minWidth:160}}/>
         </div>
@@ -1050,7 +1283,7 @@ function CRMInline({ clinic, clinics, estagios, statusList, etiquetas, interesse
         )}
       </div>
 
-      {(openLead||showNewLead)&&<LeadModal lead={openLead} onClose={()=>{setOpenLead(null);setShowNewLead(false)}} estagios={estagios} statusList={statusList} etiquetas={etiquetas} interesses={interesses} onSave={handleSaveLead} saving={saving}/>}
+      {(openLead||showNewLead)&&<LeadModal lead={openLead} onClose={()=>{setOpenLead(null);setShowNewLead(false)}} estagios={estagios} statusList={statusList} etiquetas={etiquetas} interesses={interesses} onSave={handleSaveLead} onDelete={handleDeleteLead} saving={saving}/>}
       {showDisparo&&<DisparoModal
         leads={leads}
         selected={selected}
@@ -1064,7 +1297,7 @@ function CRMInline({ clinic, clinics, estagios, statusList, etiquetas, interesse
         onExecutarDisparo={executarDisparo}
         onCancelarExecucao={cancelarExecucao}
       />}
-      {showConfig&&<CRMConfigModal onClose={()=>setShowConfig(false)} clinicId={clinic?.id} estagios={estagios} statusList={statusList} etiquetas={etiquetas} interesses={interesses} configActions={configActions}/>}
+      {showConfig&&<CRMConfigModal onClose={()=>setShowConfig(false)} clinic={clinic} updateClinic={updateClinic} deleteClinic={deleteClinic} estagios={estagios} statusList={statusList} etiquetas={etiquetas} interesses={interesses} configActions={configActions}/>}
       {showModelos&&<ModelosModal onClose={()=>setShowModelos(false)} templates={templates} clinicId={clinic?.id} createTemplate={createTemplate} deleteTemplate={deleteTemplate}/>}
       {showImportar&&<ImportarLeadsModal onClose={()=>setShowImportar(false)} onImport={handleImportarLeads}/>}
       {toast&&<Toast msg={toast.msg} type={toast.type}/>}
@@ -1090,9 +1323,9 @@ export default function App() {
     if(session) supabase.from('users').select('*').eq('auth_id',session.user.id).single().then(({data})=>setCurrentUser(data))
   },[session])
 
-  const{clinics,loading:clinicsLoading,refetch:refetchClinics}=useClinics()
+  const{clinics,loading:clinicsLoading,refetch:refetchClinics,updateClinic,deleteClinic}=useClinics()
   const{estagios,statusList,etiquetas,interesses,...configActions}=useCRMConfig(clinicSelecionada?.id)
-  const{leads,loading:leadsLoading,createLead,updateLead}=useLeads(clinicSelecionada?.id)
+  const{leads,loading:leadsLoading,createLead,updateLead,deleteLead}=useLeads(clinicSelecionada?.id)
   const{templates,createTemplate,deleteTemplate}=useTemplates(clinicSelecionada?.id)
   const{createDisparo,executarDisparo,cancelarExecucao,disparos,refetch:refetchDisparos}=useDisparos(clinicSelecionada?.id)
 
@@ -1157,6 +1390,9 @@ export default function App() {
       leadsLoading={leadsLoading}
       createLead={createLead}
       updateLead={updateLead}
+      deleteLead={deleteLead}
+      updateClinic={updateClinic}
+      deleteClinic={deleteClinic}
       templates={templates}
       createTemplate={createTemplate}
       deleteTemplate={deleteTemplate}

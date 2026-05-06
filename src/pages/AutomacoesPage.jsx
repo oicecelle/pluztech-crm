@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { useHorarios, useScripts, useIAPrompt, useAutomacaoLogs } from '../hooks/useAutomacoes'
+import { useHorarios, useScripts, useIAPrompt, useAutomacaoLogs, useFollowupConfig, useFollowupFila, useAgendamentosConfig, useAgendamentos } from '../hooks/useAutomacoes'
 
 // ─── PALETA DARK ─────────────────────────────────────────────
 const D = {
@@ -683,15 +683,362 @@ const N8nTab = ({ clinicId }) => {
   )
 }
 
+// ─── ABA FOLLOW-UP ────────────────────────────────────────────
+const FollowUpTab = ({ clinicId }) => {
+  const { config, loading: lcfg, save: saveCfg } = useFollowupConfig(clinicId)
+  const { fila, loading: lfila, refetch: refetchFila, updateMensagem, remove: removeFila } = useFollowupFila(clinicId)
+  const [form, setForm] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const [toast, setToast] = useState(null)
+  const [editMsgId, setEditMsgId] = useState(null)
+  const [editMsgVal, setEditMsgVal] = useState('')
+  const showT = (msg, type='success') => { setToast({msg,type}); setTimeout(()=>setToast(null),2500) }
+
+  if (!form && config) setForm({...config})
+  const set = (k,v) => setForm(f=>({...f,[k]:v}))
+
+  const handleSave = async () => {
+    setSaving(true)
+    const { error } = await saveCfg(form)
+    setSaving(false)
+    if (error) showT('Erro: '+error.message, 'error')
+    else showT('Configuração salva!')
+  }
+
+  const handleEditMsg = async (id) => {
+    const { error } = await updateMensagem(id, editMsgVal)
+    if (error) showT('Erro ao salvar mensagem', 'error')
+    else { showT('Mensagem atualizada!'); setEditMsgId(null) }
+  }
+
+  const STATUS_COLOR = { pendente:'#F59E0B', enviado:'#10B981', removido:'#9CA3AF', respondeu:'#3B82F6' }
+  const STATUS_LABEL = { pendente:'Pendente', enviado:'Enviado', removido:'Removido', respondeu:'Respondeu' }
+
+  if (lcfg || !form) return <Spinner />
+
+  const fu1Fila = fila.filter(f=>f.tipo==='fu1')
+  const fu2Fila = fila.filter(f=>f.tipo==='fu2')
+
+  return (
+    <div style={{display:'flex',flexDirection:'column',gap:20}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <div>
+          <h3 style={{margin:0,fontSize:15,fontWeight:700,color:D.text}}>Follow-up Automático</h3>
+          <p style={{margin:'4px 0 0',fontSize:13,color:D.sub}}>Reengajamento de leads que não responderam</p>
+        </div>
+        <Btn size="sm" variant={saving?'ghost':'primary'} onClick={handleSave} disabled={saving}>{saving?'Salvando...':'Salvar configuração'}</Btn>
+      </div>
+
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
+        {/* FU1 */}
+        <Card>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
+            <span style={{fontSize:14,fontWeight:700,color:D.text}}>Follow-up 1 — Pergunta sem resposta</span>
+            <Toggle value={form.fu1_ativo} onChange={v=>set('fu1_ativo',v)} />
+          </div>
+          <div style={{display:'flex',flexDirection:'column',gap:12,opacity:form.fu1_ativo?1:0.4,transition:'opacity 0.2s'}}>
+            <Input label="HORÁRIO DE ENVIO (Seg–Sex)" value={form.fu1_hora} onChange={v=>set('fu1_hora',v)} type="time" />
+            <div>
+              <label style={{fontSize:11,fontWeight:700,color:D.sub,letterSpacing:'0.06em',display:'block',marginBottom:5}}>MENSAGEM DE FOLLOW-UP</label>
+              <textarea value={form.fu1_mensagem||''} onChange={e=>set('fu1_mensagem',e.target.value)} rows={3}
+                placeholder="Ex: Olá! Vi que você ficou com uma dúvida, posso ajudar? 😊"
+                style={{width:'100%',border:`1px solid ${D.border}`,borderRadius:8,padding:'9px 12px',fontSize:13,outline:'none',fontFamily:'inherit',background:D.input,color:D.text,resize:'vertical',boxSizing:'border-box'}} />
+            </div>
+            <div style={{fontSize:12,color:D.sub,background:'#161616',borderRadius:8,padding:'8px 12px',border:`1px solid ${D.border}`}}>
+              A fila aparece 1h antes do envio. O sistema detecta automaticamente perguntas (mensagens com "?") enviadas ontem pela equipe ou bot sem resposta do lead.
+            </div>
+          </div>
+        </Card>
+
+        {/* FU2 */}
+        <Card>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
+            <span style={{fontSize:14,fontWeight:700,color:D.text}}>Follow-up 2 — Mensagem específica</span>
+            <Toggle value={form.fu2_ativo} onChange={v=>set('fu2_ativo',v)} />
+          </div>
+          <div style={{display:'flex',flexDirection:'column',gap:12,opacity:form.fu2_ativo?1:0.4,transition:'opacity 0.2s'}}>
+            <Input label="HORÁRIO DE ENVIO (Seg–Sáb)" value={form.fu2_hora} onChange={v=>set('fu2_hora',v)} type="time" />
+            <Input label="TEXTO-GATILHO (quando a equipe envia esta frase, entra na fila)" value={form.fu2_pergunta_gatilho||''} onChange={v=>set('fu2_pergunta_gatilho',v)} placeholder="Ex: Você tem interesse no procedimento?" />
+            <div>
+              <label style={{fontSize:11,fontWeight:700,color:D.sub,letterSpacing:'0.06em',display:'block',marginBottom:5}}>MENSAGEM DE FOLLOW-UP</label>
+              <textarea value={form.fu2_mensagem||''} onChange={e=>set('fu2_mensagem',e.target.value)} rows={3}
+                placeholder="Ex: Olá! Ficou com alguma dúvida sobre o procedimento? Estou aqui para ajudar! 😊"
+                style={{width:'100%',border:`1px solid ${D.border}`,borderRadius:8,padding:'9px 12px',fontSize:13,outline:'none',fontFamily:'inherit',background:D.input,color:D.text,resize:'vertical',boxSizing:'border-box'}} />
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {/* Fila FU1 */}
+      <div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+          <span style={{fontSize:13,fontWeight:700,color:D.text}}>Fila FU1 — hoje ({fu1Fila.length})</span>
+          <Btn size="sm" variant="secondary" onClick={refetchFila}>↻ Atualizar</Btn>
+        </div>
+        {lfila ? <Spinner /> : fu1Fila.length===0 ? (
+          <div style={{textAlign:'center',padding:24,color:D.sub,fontSize:13,border:`1px dashed ${D.border}`,borderRadius:10}}>Fila vazia — será populada 1h antes do envio</div>
+        ) : (
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+            {fu1Fila.map(item=>(
+              <Card key={item.id} style={{padding:'12px 16px'}}>
+                <div style={{display:'flex',alignItems:'flex-start',gap:12}}>
+                  <div style={{flex:1}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+                      <span style={{fontSize:13,fontWeight:700,color:D.text,fontFamily:'monospace'}}>{item.whatsapp}</span>
+                      {item.nome_lead && <span style={{fontSize:12,color:D.sub}}>{item.nome_lead}</span>}
+                      <Badge label={STATUS_LABEL[item.status]||item.status} color={STATUS_COLOR[item.status]||D.sub} />
+                    </div>
+                    {item.mensagem_original && (
+                      <div style={{fontSize:12,color:D.sub,marginBottom:6}}>
+                        <span style={{fontWeight:700}}>Msg original: </span>"{item.mensagem_original}"
+                      </div>
+                    )}
+                    {editMsgId===item.id ? (
+                      <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                        <input value={editMsgVal} onChange={e=>setEditMsgVal(e.target.value)}
+                          style={{flex:1,border:`1px solid ${D.accent}`,borderRadius:6,padding:'6px 10px',fontSize:12,background:D.input,color:D.text,outline:'none',fontFamily:'inherit'}} />
+                        <Btn size="sm" onClick={()=>handleEditMsg(item.id)}>OK</Btn>
+                        <Btn size="sm" variant="secondary" onClick={()=>setEditMsgId(null)}>✕</Btn>
+                      </div>
+                    ) : (
+                      <div style={{fontSize:12,color:D.text}}>
+                        <span style={{fontWeight:700,color:D.sub}}>Msg FU: </span>"{item.mensagem_followup}"
+                      </div>
+                    )}
+                  </div>
+                  <div style={{display:'flex',gap:6,flexShrink:0}}>
+                    {editMsgId!==item.id && <Btn size="sm" variant="ghost" onClick={()=>{setEditMsgId(item.id);setEditMsgVal(item.mensagem_followup||'')}}>Editar msg</Btn>}
+                    {item.status==='pendente' && <Btn size="sm" variant="danger" onClick={()=>removeFila(item.id)}>Remover</Btn>}
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Fila FU2 */}
+      <div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+          <span style={{fontSize:13,fontWeight:700,color:D.text}}>Fila FU2 — hoje ({fu2Fila.length})</span>
+        </div>
+        {lfila ? null : fu2Fila.length===0 ? (
+          <div style={{textAlign:'center',padding:24,color:D.sub,fontSize:13,border:`1px dashed ${D.border}`,borderRadius:10}}>Fila vazia — populada em tempo real quando a equipe envia o texto-gatilho</div>
+        ) : (
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+            {fu2Fila.map(item=>(
+              <Card key={item.id} style={{padding:'12px 16px'}}>
+                <div style={{display:'flex',alignItems:'flex-start',gap:12}}>
+                  <div style={{flex:1}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+                      <span style={{fontSize:13,fontWeight:700,color:D.text,fontFamily:'monospace'}}>{item.whatsapp}</span>
+                      {item.nome_lead && <span style={{fontSize:12,color:D.sub}}>{item.nome_lead}</span>}
+                      <Badge label={STATUS_LABEL[item.status]||item.status} color={STATUS_COLOR[item.status]||D.sub} />
+                    </div>
+                    {item.mensagem_original && (
+                      <div style={{fontSize:12,color:D.sub,marginBottom:6}}>
+                        <span style={{fontWeight:700}}>Gatilho detectado: </span>"{item.mensagem_original}"
+                      </div>
+                    )}
+                    {editMsgId===item.id ? (
+                      <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                        <input value={editMsgVal} onChange={e=>setEditMsgVal(e.target.value)}
+                          style={{flex:1,border:`1px solid ${D.accent}`,borderRadius:6,padding:'6px 10px',fontSize:12,background:D.input,color:D.text,outline:'none',fontFamily:'inherit'}} />
+                        <Btn size="sm" onClick={()=>handleEditMsg(item.id)}>OK</Btn>
+                        <Btn size="sm" variant="secondary" onClick={()=>setEditMsgId(null)}>✕</Btn>
+                      </div>
+                    ) : (
+                      <div style={{fontSize:12,color:D.text}}>
+                        <span style={{fontWeight:700,color:D.sub}}>Msg FU: </span>"{item.mensagem_followup}"
+                      </div>
+                    )}
+                  </div>
+                  <div style={{display:'flex',gap:6,flexShrink:0}}>
+                    {editMsgId!==item.id && <Btn size="sm" variant="ghost" onClick={()=>{setEditMsgId(item.id);setEditMsgVal(item.mensagem_followup||'')}}>Editar msg</Btn>}
+                    {item.status==='pendente' && <Btn size="sm" variant="danger" onClick={()=>removeFila(item.id)}>Remover</Btn>}
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {toast && <Toast msg={toast.msg} type={toast.type}/>}
+    </div>
+  )
+}
+
+// ─── ABA AGENDAMENTOS ─────────────────────────────────────────
+const AgendamentosTab = ({ clinicId }) => {
+  const { config, loading: lcfg, save: saveCfg } = useAgendamentosConfig(clinicId)
+  const { agendamentos, loading: lag, refetch, save: saveAg, updateStatus, remove } = useAgendamentos(clinicId)
+  const [form, setForm] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const [toast, setToast] = useState(null)
+  const [showModal, setShowModal] = useState(false)
+  const [editAg, setEditAg] = useState(null)
+  const showT = (msg, type='success') => { setToast({msg,type}); setTimeout(()=>setToast(null),2500) }
+
+  if (!form && config) setForm({...config})
+  const set = (k,v) => setForm(f=>({...f,[k]:v}))
+
+  const handleSaveCfg = async () => {
+    setSaving(true)
+    const { error } = await saveCfg(form)
+    setSaving(false)
+    if (error) showT('Erro: '+error.message,'error')
+    else showT('Configuração salva!')
+  }
+
+  const blankAg = { whatsapp:'', nome_lead:'', data_agendamento:'', hora_agendamento:'', procedimento:'', mensagem_detectada:'', status:'pendente' }
+  const [agForm, setAgForm] = useState(blankAg)
+  const setAg = (k,v) => setAgForm(f=>({...f,[k]:v}))
+
+  const handleSaveAg = async () => {
+    const { error } = await saveAg(editAg ? {...agForm, id: editAg} : agForm)
+    if (error) showT('Erro: '+error.message,'error')
+    else { showT(editAg?'Agendamento atualizado!':'Agendamento criado!'); setShowModal(false); setAgForm(blankAg); setEditAg(null) }
+  }
+
+  const STATUS_COLOR = { pendente:'#F59E0B', confirmacao_enviada:'#10B981', cancelado:'#EF4444', compareceu:'#3B82F6', faltou:'#9CA3AF' }
+  const STATUS_LABEL = { pendente:'Pendente', confirmacao_enviada:'Confirmação enviada', cancelado:'Cancelado', compareceu:'Compareceu', faltou:'Faltou' }
+  const STATUS_OPTS = Object.entries(STATUS_LABEL).map(([k,v])=>({value:k,label:v}))
+
+  const fmtDate = d => d ? new Date(d+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit'}) : '—'
+
+  if (lcfg || !form) return <Spinner />
+
+  return (
+    <div style={{display:'flex',flexDirection:'column',gap:20}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <div>
+          <h3 style={{margin:0,fontSize:15,fontWeight:700,color:D.text}}>Confirmação de Agendamentos</h3>
+          <p style={{margin:'4px 0 0',fontSize:13,color:D.sub}}>Envia confirmação automática para agendamentos de amanhã</p>
+        </div>
+        <Btn size="sm" variant={saving?'ghost':'primary'} onClick={handleSaveCfg} disabled={saving}>{saving?'Salvando...':'Salvar configuração'}</Btn>
+      </div>
+
+      <Card>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
+          <span style={{fontSize:14,fontWeight:700,color:D.text}}>Configurações</span>
+          <Toggle value={form.ativo} onChange={v=>set('ativo',v)} label="Confirmação ativa" />
+        </div>
+        <div style={{display:'flex',flexDirection:'column',gap:12,opacity:form.ativo?1:0.4,transition:'opacity 0.2s'}}>
+          <Input label="HORÁRIO DE ENVIO" value={form.hora_envio} onChange={v=>set('hora_envio',v)} type="time" />
+          <div>
+            <label style={{fontSize:11,fontWeight:700,color:D.sub,letterSpacing:'0.06em',display:'block',marginBottom:5}}>MENSAGEM DE CONFIRMAÇÃO</label>
+            <textarea value={form.mensagem_confirmacao||''} onChange={e=>set('mensagem_confirmacao',e.target.value)} rows={3}
+              style={{width:'100%',border:`1px solid ${D.border}`,borderRadius:8,padding:'9px 12px',fontSize:13,outline:'none',fontFamily:'inherit',background:D.input,color:D.text,resize:'vertical',boxSizing:'border-box'}} />
+            <div style={{fontSize:11,color:D.sub,marginTop:4}}>Variáveis: <code style={{background:'#111',padding:'1px 5px',borderRadius:3}}>{'{nome}'}</code> <code style={{background:'#111',padding:'1px 5px',borderRadius:3}}>{'{hora}'}</code> <code style={{background:'#111',padding:'1px 5px',borderRadius:3}}>{'{data}'}</code> <code style={{background:'#111',padding:'1px 5px',borderRadius:3}}>{'{procedimento}'}</code></div>
+          </div>
+          <div>
+            <label style={{fontSize:11,fontWeight:700,color:D.sub,letterSpacing:'0.06em',display:'block',marginBottom:5}}>PALAVRAS-GATILHO (vírgula separando)</label>
+            <input value={form.palavras_gatilho||''} onChange={e=>set('palavras_gatilho',e.target.value)}
+              placeholder="agendado,remarcado,confirmei,horário confirmado"
+              style={{width:'100%',border:`1px solid ${D.border}`,borderRadius:8,padding:'9px 12px',fontSize:13,outline:'none',fontFamily:'inherit',background:D.input,color:D.text,boxSizing:'border-box'}} />
+            <div style={{fontSize:11,color:D.sub,marginTop:4}}>Quando a equipe envia uma mensagem contendo essas palavras, o agendamento é detectado automaticamente.</div>
+          </div>
+        </div>
+      </Card>
+
+      <div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+          <span style={{fontSize:13,fontWeight:700,color:D.text}}>Agendamentos ({agendamentos.length})</span>
+          <div style={{display:'flex',gap:8}}>
+            <Btn size="sm" variant="secondary" onClick={refetch}>↻ Atualizar</Btn>
+            <Btn size="sm" onClick={()=>{setAgForm(blankAg);setEditAg(null);setShowModal(true)}}>+ Adicionar</Btn>
+          </div>
+        </div>
+
+        {lag ? <Spinner /> : agendamentos.length===0 ? (
+          <div style={{textAlign:'center',padding:32,color:D.sub,fontSize:13,border:`1px dashed ${D.border}`,borderRadius:10}}>
+            Nenhum agendamento — serão detectados automaticamente quando a equipe mencionar palavras-gatilho
+          </div>
+        ) : (
+          <Card style={{padding:0,overflow:'hidden'}}>
+            <div style={{overflowX:'auto'}}>
+              <table style={{width:'100%',borderCollapse:'collapse',minWidth:700}}>
+                <thead>
+                  <tr style={{background:'#161616'}}>
+                    {['DATA','HORA','LEAD','WHATSAPP','PROCEDIMENTO','MENSAGEM DETECTADA','STATUS','AÇÕES'].map(h=>(
+                      <th key={h} style={{padding:'10px 12px',textAlign:'left',fontSize:11,fontWeight:700,color:D.sub,letterSpacing:'0.06em',borderBottom:`1px solid ${D.border}`,whiteSpace:'nowrap'}}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {agendamentos.map(ag=>(
+                    <tr key={ag.id} style={{borderBottom:`1px solid ${D.border}22`}}>
+                      <td style={{padding:'10px 12px',fontSize:12,color:D.text,whiteSpace:'nowrap'}}>{fmtDate(ag.data_agendamento)}</td>
+                      <td style={{padding:'10px 12px',fontSize:12,color:D.text,whiteSpace:'nowrap'}}>{ag.hora_agendamento||'—'}</td>
+                      <td style={{padding:'10px 12px',fontSize:12,color:D.text}}>{ag.nome_lead||'—'}</td>
+                      <td style={{padding:'10px 12px',fontSize:12,color:D.text,fontFamily:'monospace'}}>{ag.whatsapp}</td>
+                      <td style={{padding:'10px 12px',fontSize:12,color:D.text}}>{ag.procedimento||'—'}</td>
+                      <td style={{padding:'10px 12px',fontSize:12,color:D.sub,maxWidth:180,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={ag.mensagem_detectada||''}>
+                        {ag.mensagem_detectada ? `"${ag.mensagem_detectada.slice(0,60)}${ag.mensagem_detectada.length>60?'...':''}"` : '—'}
+                      </td>
+                      <td style={{padding:'10px 12px'}}>
+                        <select value={ag.status} onChange={e=>updateStatus(ag.id,e.target.value)}
+                          style={{border:`1px solid ${STATUS_COLOR[ag.status]||D.border}44`,borderRadius:6,padding:'3px 8px',fontSize:11,fontWeight:600,background:D.input,color:STATUS_COLOR[ag.status]||D.text,cursor:'pointer',fontFamily:'inherit'}}>
+                          {STATUS_OPTS.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
+                        </select>
+                      </td>
+                      <td style={{padding:'10px 12px'}}>
+                        <div style={{display:'flex',gap:4}}>
+                          <Btn size="sm" variant="secondary" onClick={()=>{setAgForm({...ag});setEditAg(ag.id);setShowModal(true)}}>Editar</Btn>
+                          <Btn size="sm" variant="danger" onClick={()=>remove(ag.id)}>✕</Btn>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        )}
+      </div>
+
+      <Modal open={showModal} onClose={()=>{setShowModal(false);setEditAg(null);setAgForm(blankAg)}} title={editAg?'Editar Agendamento':'Novo Agendamento'}>
+        <div style={{display:'flex',flexDirection:'column',gap:14}}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+            <Input label="WHATSAPP" value={agForm.whatsapp} onChange={v=>setAg('whatsapp',v)} placeholder="5511999999999" />
+            <Input label="NOME DO LEAD" value={agForm.nome_lead||''} onChange={v=>setAg('nome_lead',v)} placeholder="Nome completo" />
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+            <Input label="DATA DO AGENDAMENTO" value={agForm.data_agendamento||''} onChange={v=>setAg('data_agendamento',v)} type="date" />
+            <Input label="HORA" value={agForm.hora_agendamento||''} onChange={v=>setAg('hora_agendamento',v)} type="time" />
+          </div>
+          <Input label="PROCEDIMENTO" value={agForm.procedimento||''} onChange={v=>setAg('procedimento',v)} placeholder="Ex: Botox, Harmonização facial..." />
+          <div>
+            <label style={{fontSize:11,fontWeight:700,color:D.sub,letterSpacing:'0.06em',display:'block',marginBottom:5}}>MENSAGEM DETECTADA (opcional)</label>
+            <textarea value={agForm.mensagem_detectada||''} onChange={e=>setAg('mensagem_detectada',e.target.value)} rows={2}
+              placeholder="Mensagem original da equipe que gerou este agendamento"
+              style={{width:'100%',border:`1px solid ${D.border}`,borderRadius:8,padding:'9px 12px',fontSize:13,outline:'none',fontFamily:'inherit',background:D.input,color:D.text,resize:'vertical',boxSizing:'border-box'}} />
+          </div>
+          <Sel label="STATUS" value={agForm.status} onChange={v=>setAg('status',v)} options={STATUS_OPTS} />
+          <div style={{display:'flex',justifyContent:'flex-end',gap:8,paddingTop:8,borderTop:`1px solid ${D.border}`}}>
+            <Btn variant="secondary" onClick={()=>{setShowModal(false);setEditAg(null);setAgForm(blankAg)}}>Cancelar</Btn>
+            <Btn onClick={handleSaveAg}>{editAg?'Atualizar':'Criar agendamento'}</Btn>
+          </div>
+        </div>
+      </Modal>
+
+      {toast && <Toast msg={toast.msg} type={toast.type}/>}
+    </div>
+  )
+}
+
 // ─── PÁGINA PRINCIPAL ─────────────────────────────────────────
 export default function AutomacoesPage({ clinic, clinics, onChangeClinic }) {
   const [tab, setTab] = useState('horario')
   const tabs = [
-    { id:'horario', label:'🕐 Horário' },
-    { id:'scripts', label:'⚡ Scripts' },
-    { id:'ia',      label:'🤖 IA' },
-    { id:'n8n',     label:'🔗 Fluxos N8n' },
-    { id:'logs',    label:'📋 Logs' },
+    { id:'horario',      label:'🕐 Horário' },
+    { id:'scripts',      label:'⚡ Scripts' },
+    { id:'ia',           label:'🤖 IA' },
+    { id:'followup',     label:'🔁 Follow-up' },
+    { id:'agendamentos', label:'📅 Agendamentos' },
+    { id:'n8n',          label:'🔗 Fluxos N8n' },
+    { id:'logs',         label:'📋 Logs' },
   ]
   const tabS = a => ({
     padding:'10px 18px', fontSize:13, fontWeight:600, cursor:'pointer', border:'none',
@@ -713,11 +1060,13 @@ export default function AutomacoesPage({ clinic, clinics, onChangeClinic }) {
         ))}
       </div>
       <div style={{ background:D.card, border:`1px solid ${D.border}`, borderTop:'none', borderRadius:'0 0 12px 12px', padding:24 }}>
-        {tab==='horario' && <HorarioTab clinicId={clinic?.id} />}
-        {tab==='scripts' && <ScriptsTab clinicId={clinic?.id} />}
-        {tab==='ia'      && <IATab clinicId={clinic?.id} />}
-        {tab==='n8n'     && <N8nTab clinicId={clinic?.id} />}
-        {tab==='logs'    && <LogsTab clinicId={clinic?.id} />}
+        {tab==='horario'      && <HorarioTab clinicId={clinic?.id} />}
+        {tab==='scripts'      && <ScriptsTab clinicId={clinic?.id} />}
+        {tab==='ia'           && <IATab clinicId={clinic?.id} />}
+        {tab==='followup'     && <FollowUpTab clinicId={clinic?.id} />}
+        {tab==='agendamentos' && <AgendamentosTab clinicId={clinic?.id} />}
+        {tab==='n8n'          && <N8nTab clinicId={clinic?.id} />}
+        {tab==='logs'         && <LogsTab clinicId={clinic?.id} />}
       </div>
     </div>
   )

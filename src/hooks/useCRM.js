@@ -12,15 +12,27 @@ export function useClinics() {
     setLoading(true)
     const { data, error } = await supabase
       .from('clinics')
-      .select('id, name, icon_url')
-      .eq('ativo', true)
+      .select('id, name, icon_url, ativo')
       .order('name')
     if (!error) setClinics(data || [])
     setLoading(false)
   }, [])
 
   useEffect(() => { fetch() }, [fetch])
-  return { clinics, loading, refetch: fetch }
+
+  const updateClinic = async (id, form) => {
+    const { error } = await supabase.from('clinics').update(form).eq('id', id)
+    if (!error) await fetch()
+    return { error }
+  }
+
+  const deleteClinic = async (id) => {
+    const { error } = await supabase.from('clinics').delete().eq('id', id)
+    if (!error) setClinics(prev => prev.filter(c => c.id !== id))
+    return { error }
+  }
+
+  return { clinics, loading, refetch: fetch, updateClinic, deleteClinic }
 }
 
 // ─────────────────────────────────────────

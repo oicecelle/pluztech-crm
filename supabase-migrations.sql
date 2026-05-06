@@ -170,3 +170,143 @@ DO $$ BEGIN
 END $$;
 
 -- Pronto! Execute este script no Supabase SQL Editor.
+
+-- ============================================================
+-- MIGRATION v3 — N8n Workflows (executar após as migrations acima)
+-- ============================================================
+
+-- 14. Criar horario_comercial se não existir, depois adicionar colunas
+-- (sem REFERENCES para ser compatível com qualquer estrutura de clinics)
+CREATE TABLE IF NOT EXISTS horario_comercial (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  clinic_id uuid,
+  instancia text,
+  hora_inicio text DEFAULT '08:00',
+  hora_fim text DEFAULT '18:00',
+  dias_semana jsonb DEFAULT '[1,2,3,4,5]'::jsonb,
+  mensagem_fora text,
+  criado_em timestamptz DEFAULT now()
+);
+
+ALTER TABLE horario_comercial
+  ADD COLUMN IF NOT EXISTS clinic_id uuid,
+  ADD COLUMN IF NOT EXISTS instancia text,
+  ADD COLUMN IF NOT EXISTS uazapi_token text,
+  ADD COLUMN IF NOT EXISTS uazapi_base_url text DEFAULT 'https://customix.uazapi.com',
+  ADD COLUMN IF NOT EXISTS ativo boolean DEFAULT true,
+  ADD COLUMN IF NOT EXISTS grupo_whatsapp text,
+  ADD COLUMN IF NOT EXISTS grupo_relatorio text,
+  ADD COLUMN IF NOT EXISTS relatorio_periodicidade text DEFAULT 'diario',
+  ADD COLUMN IF NOT EXISTS relatorio_hora text DEFAULT '20:00';
+
+-- 14b. Criar ia_prompts se não existir
+CREATE TABLE IF NOT EXISTS ia_prompts (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  clinic_id uuid,
+  system_prompt text,
+  modelo text DEFAULT 'gpt-4o',
+  temperatura numeric DEFAULT 0.7,
+  criado_em timestamptz DEFAULT now()
+);
+ALTER TABLE ia_prompts ADD COLUMN IF NOT EXISTS clinic_id uuid;
+
+-- 14c. Garantir clinic_id em leads (pode estar ausente em ambientes antigos)
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'leads' AND column_name = 'clinic_id'
+  ) THEN
+    ALTER TABLE leads ADD COLUMN clinic_id uuid;
+  END IF;
+END $$;
+
+-- Colunas para disparo com múltiplas partes e arquivos
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'disparos') THEN
+    ALTER TABLE disparos ADD COLUMN IF NOT EXISTS partes jsonb;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'disparo_leads') THEN
+    ALTER TABLE disparo_leads ADD COLUMN IF NOT EXISTS partes jsonb;
+  END IF;
+END $$;
+
+-- 15. Coluna status_bot em leads (controla se bot está ativo para o lead)
+ALTER TABLE leads
+  ADD COLUMN IF NOT EXISTS status_bot boolean DEFAULT true;
+
+-- 16. Tabela fila de mensagens fora do horário
+CREATE TABLE IF NOT EXISTS fila_mensagens (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  clinic_id uuid,
+  phone text NOT NULL,
+  push_name text,
+  texto text,
+  instancia text,
+  status text DEFAULT 'pendente',
+  criado_em timestamptz DEFAULT now(),
+  enviado_em timestamptz
+);
+
+-- 17. Tabela interacoes (histórico de conversas IA)
+CREATE TABLE IF NOT EXISTS interacoes (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  clinic_id uuid,
+  phone text NOT NULL,
+  tipo text NOT NULL,
+  conteudo text,
+  criado_em timestamptz DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_interacoes_clinic_phone ON interacoes(clinic_id, phone);
+CREATE INDEX IF NOT EXISTS idx_interacoes_criado ON interacoes(criado_em DESC);
+CREATE INDEX IF NOT EXISTS idx_fila_status ON fila_mensagens(status, clinic_id);
+
+DO $$ BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'leads' AND column_name = 'clinic_id'
+  ) THEN
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_leads_status_bot') THEN
+      CREATE INDEX idx_leads_status_bot ON leads(status_bot, clinic_id);
+    END IF;
+  END IF;
+END $$;
+
+-- 18. RLS nas novas tabelas
+ALTER TABLE horario_comercial ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ia_prompts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE fila_mensagens ENABLE ROW LEVEL SECURITY;
+ALTER TABLE interacoes ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+  -- horario_comercial
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='horario_comercial' AND policyname='autenticados_horario') THEN
+    CREATE POLICY "autenticados_horario" ON horario_comercial FOR ALL TO authenticated USING (true) WITH CHECK (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='horario_comercial' AND policyname='service_role_horario') THEN
+    CREATE POLICY "service_role_horario" ON horario_comercial FOR ALL TO service_role USING (true) WITH CHECK (true);
+  END IF;
+  -- ia_prompts
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='ia_prompts' AND policyname='autenticados_ia_prompts') THEN
+    CREATE POLICY "autenticados_ia_prompts" ON ia_prompts FOR ALL TO authenticated USING (true) WITH CHECK (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='ia_prompts' AND policyname='service_role_ia_prompts') THEN
+    CREATE POLICY "service_role_ia_prompts" ON ia_prompts FOR ALL TO service_role USING (true) WITH CHECK (true);
+  END IF;
+  -- fila_mensagens
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='fila_mensagens' AND policyname='autenticados_fila_mensagens') THEN
+    CREATE POLICY "autenticados_fila_mensagens" ON fila_mensagens FOR ALL TO authenticated USING (true) WITH CHECK (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='fila_mensagens' AND policyname='service_role_fila') THEN
+    CREATE POLICY "service_role_fila" ON fila_mensagens FOR ALL TO service_role USING (true) WITH CHECK (true);
+  END IF;
+  -- interacoes
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='interacoes' AND policyname='autenticados_interacoes') THEN
+    CREATE POLICY "autenticados_interacoes" ON interacoes FOR ALL TO authenticated USING (true) WITH CHECK (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='interacoes' AND policyname='service_role_interacoes') THEN
+    CREATE POLICY "service_role_interacoes" ON interacoes FOR ALL TO service_role USING (true) WITH CHECK (true);
+  END IF;
+END $$;
+
+-- Pronto! Migration v3 concluída.
