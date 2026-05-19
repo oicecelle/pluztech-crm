@@ -194,6 +194,26 @@ export function useFAQ(clinicId) {
   return { faqs, loading, save, remove, refetch: fetch }
 }
 
+export function useOrigens(clinicId) {
+  const [origens, setOrigens] = useState([])
+  const [loading, setLoading] = useState(true)
+  const fetch = useCallback(async () => {
+    if (!clinicId) return
+    setLoading(true)
+    const { data } = await supabase.from('crm_origens').select('*').eq('clinic_id', clinicId).order('nome')
+    setOrigens(data || [])
+    setLoading(false)
+  }, [clinicId])
+  useEffect(() => { fetch() }, [fetch])
+  const save = async (form) => {
+    const payload = { ...form, clinic_id: clinicId }
+    if (form.id) { const { error } = await supabase.from('crm_origens').update(payload).eq('id', form.id); if (!error) await fetch(); return { error } }
+    const { error } = await supabase.from('crm_origens').insert(payload); if (!error) await fetch(); return { error }
+  }
+  const remove = async (id) => { const { error } = await supabase.from('crm_origens').delete().eq('id', id); if (!error) setOrigens(o => o.filter(x => x.id !== id)); return { error } }
+  return { origens, loading, save, remove, refetch: fetch }
+}
+
 export function useTarefasPendentes(clinicId) {
   const [total, setTotal] = useState(0)
   useEffect(() => {

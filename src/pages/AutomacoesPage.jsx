@@ -301,7 +301,7 @@ const HorarioTab = ({ clinicId }) => {
 }
 
 // ─── MODAL SCRIPT ─────────────────────────────────────────────
-const ScriptModal = ({ script, onClose, onSave, saving }) => {
+const ScriptModal = ({ script, onClose, onSave, saving, allScripts=[] }) => {
   const blank = { nome:'', tipo_gatilho:'texto_exato', gatilho_valor:'', acao_pos_envio:'aguardar', ativo:true, partes:[] }
   const [form, setForm] = useState(script ? {...script} : blank)
   const set = (k,v) => setForm(f=>({...f,[k]:v}))
@@ -323,6 +323,9 @@ const ScriptModal = ({ script, onClose, onSave, saving }) => {
         </div>
         <Sel label="AÇÃO APÓS ENVIAR" value={form.acao_pos_envio} onChange={v=>set('acao_pos_envio',v)}
           options={Object.entries(ACAO_LABEL).map(([k,v])=>({value:k,label:v}))} />
+
+        <Sel label="CONDIÇÃO: EXECUTAR SOMENTE APÓS SCRIPT (continuidade)" value={form.condicao_script_anterior_id||''} onChange={v=>set('condicao_script_anterior_id',v||null)}
+          options={allScripts.filter(s => s.id !== (script?.id)).map(s=>({value:s.id,label:s.nome}))} />
 
         <div>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
@@ -435,7 +438,7 @@ const ScriptsTab = ({ clinicId }) => {
       ))}
 
       {toast && <Toast msg={toast.msg} type={toast.type}/>}
-      {showModal && <ScriptModal script={editando} onClose={()=>{ setShowModal(false); setEditando(null) }} onSave={handleSave} saving={saving} />}
+      {showModal && <ScriptModal script={editando} allScripts={scripts} onClose={()=>{ setShowModal(false); setEditando(null) }} onSave={handleSave} saving={saving} />}
     </div>
   )
 }

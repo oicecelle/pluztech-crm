@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import {
   useInfoGeral, useRotinas, useMateriais, useScriptsGuia,
-  useRegras, useProcedimentos, useProfissionais, useEventos, useFAQ
+  useRegras, useProcedimentos, useProfissionais, useEventos, useFAQ, useOrigens
 } from '../hooks/useGuia'
 
 // ─── PALETA DARK ────────────────────────────────────────────
@@ -696,6 +696,7 @@ const ProcedimentosSection = ({ clinicId }) => {
 const SECOES = [
   { id:'crm',          label:'CRM',                  icon:'📊' },
   { id:'automacoes',   label:'Automações',            icon:'⚡' },
+  { id:'origens',      label:'Origens (Campanhas)',   icon:'📡' },
   { id:'info',         label:'Informações Gerais',    icon:'ℹ️', hideFor:['cliente'] },
   { id:'rotinas',      label:'Rotinas Operacionais',  icon:'✅', hideFor:['cliente'] },
   { id:'materiais',    label:'Biblioteca de Materiais',icon:'📁', hideFor:['cliente'] },
@@ -717,6 +718,7 @@ export default function GuiaPage({ clinic, onVoltar, CRMComponent, AutomacoesCom
   const { profissionais, loading: lProf, save: sProf, remove: rProf } = useProfissionais(clinic.id)
   const { eventos, loading: lEv, save: sEv, remove: rEv } = useEventos(clinic.id)
   const { faqs, loading: lFaq, save: sFaq, remove: rFaq } = useFAQ(clinic.id)
+  const { origens, loading: lOri, save: sOri, remove: rOri } = useOrigens(clinic.id)
 
   const isAdmin = currentUser?.role === 'super_admin' || currentUser?.role === 'admin_clinica'
   const secoesFiltradas = SECOES.filter(s => {
@@ -812,6 +814,7 @@ export default function GuiaPage({ clinic, onVoltar, CRMComponent, AutomacoesCom
         <div style={{ padding:28 }}>
           {secao === 'crm'          && CRMComponent}
           {secao === 'automacoes'   && AutomacoesComponent}
+          {secao === 'origens'      && <SecaoGenerica titulo="Origens (Campanhas)" subtitulo="Cadastre origens e associe mensagens-gatilho para rastreamento automático" dados={origens} loading={lOri} onSave={sOri} onRemove={rOri} expandivel campos={[{key:'nome',label:'Nome da Origem / Campanha'},{key:'gatilho_mensagem',label:'Mensagem-Gatilho Exata (opcional)',rows:2}]} />}
           {secao === 'info'         && <InfoGeral clinicId={clinic.id} />}
           {secao === 'rotinas'      && <Rotinas clinicId={clinic.id} />}
           {secao === 'materiais'    && <Materiais clinicId={clinic.id} />}
