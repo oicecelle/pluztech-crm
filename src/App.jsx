@@ -1353,7 +1353,7 @@ export default function App() {
     if(session) supabase.from('users').select('*').eq('auth_id',session.user.id).single().then(({data})=>setCurrentUser(data))
   },[session])
 
-  const{clinics,loading:clinicsLoading,refetch:refetchClinics,updateClinic,deleteClinic}=useClinics()
+  const{clinics,loading:clinicsLoading,refetch:refetchClinics,updateClinic,deleteClinic}=useClinics(currentUser)
   const{estagios,statusList,etiquetas,interesses,...configActions}=useCRMConfig(clinicSelecionada?.id)
   const{leads,loading:leadsLoading,createLead,updateLead,deleteLead}=useLeads(clinicSelecionada?.id)
   const{templates,createTemplate,deleteTemplate}=useTemplates(clinicSelecionada?.id)
@@ -1400,8 +1400,9 @@ export default function App() {
           onSelectClinic={setClinicSelecionada}
           onNewClinic={()=>refetchClinics()}
           onSignOut={()=>supabase.auth.signOut()}
-          onPainelAdmin={()=>setPaginaAtual('admin')}
+          onPainelAdmin={currentUser?.role === 'super_admin' ? ()=>setPaginaAtual('admin') : undefined}
           onMinhaConta={()=>setPaginaAtual('conta')}
+          currentUser={currentUser}
         />
       )}
     </div>
@@ -1458,7 +1459,7 @@ export default function App() {
         AdminComponent={adminComponent}
         ContaComponent={contaComponent}
         currentUser={currentUser}
-        onPainelAdmin={()=>setPaginaAtual('admin')}
+        onPainelAdmin={currentUser?.role === 'super_admin' ? ()=>setPaginaAtual('admin') : undefined}
         onMinhaConta={()=>setPaginaAtual('conta')}
         onSignOut={()=>supabase.auth.signOut()}
       />

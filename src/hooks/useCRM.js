@@ -4,19 +4,34 @@ import { supabase } from '../lib/supabase'
 // ─────────────────────────────────────────
 // CLÍNICAS
 // ─────────────────────────────────────────
-export function useClinics() {
+export function useClinics(currentUser) {
   const [clinics, setClinics] = useState([])
   const [loading, setLoading] = useState(true)
 
   const fetch = useCallback(async () => {
+    // If not loaded user yet, don't fetch or just fetch all if it's fine. Wait, better to wait for currentUser.
+    if (currentUser === undefined) return // if we use undefined as initial state, but App uses null.
+    // Actually, if currentUser is null, we might be loading. Let's just run.
+
     setLoading(true)
-    const { data, error } = await supabase
-      .from('clinics')
-      .select('id, name, icon_url, ativo')
-      .order('name')
+    let query = supabase.from('clinics').select('id, name, icon_url, ativo').order('name')
+
+    if (currentUser && currentUser.role !== 'super_admin') {
+      const { data: cu } = await supabase.from('clinic_users').select('clinic_id').eq('user_id', currentUser.id)
+      const allowedIds = cu?.map(x => x.clinic_id) || []
+      if (allowedIds.length > 0) {
+        query = query.in('id', allowedIds)
+      } else {
+        setClinics([])
+        setLoading(false)
+        return
+      }
+    }
+
+    const { data, error } = await query
     if (!error) setClinics(data || [])
     setLoading(false)
-  }, [])
+  }, [currentUser])
 
   useEffect(() => { fetch() }, [fetch])
 

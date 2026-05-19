@@ -303,7 +303,7 @@ const NovaClinicaModal = ({ onClose, onCreated }) => {
 }
 
 // ─── CENTRAL DE CLÍNICAS ──────────────────────────────────────
-export default function CentralClinicas({ clinics, onSelectClinic, onNewClinic, onSignOut, onPainelAdmin, onMinhaConta }) {
+export default function CentralClinicas({ clinics, onSelectClinic, onNewClinic, onSignOut, onPainelAdmin, onMinhaConta, currentUser }) {
   const [busca, setBusca] = useState('')
   const [showModal, setShowModal] = useState(false)
 
@@ -359,12 +359,14 @@ export default function CentralClinicas({ clinics, onSelectClinic, onNewClinic, 
             <h1 style={{ margin:0, fontSize:28, fontWeight:800, color:C.creme, letterSpacing:'-0.03em' }}>Central de Clínicas</h1>
             <p style={{ margin:'6px 0 0', fontSize:13, color:C.cinza }}>Selecione uma clínica para acessar o guia operacional</p>
           </div>
-          <button onClick={() => setShowModal(true)}
-            style={{ padding:'10px 22px', borderRadius:10, background:C.marrom, color:C.branco, border:'none', cursor:'pointer', fontSize:13, fontWeight:700, fontFamily:'inherit', display:'flex', alignItems:'center', gap:8, transition:'all 0.15s' }}
-            onMouseEnter={e => e.currentTarget.style.background=C.marromHover}
-            onMouseLeave={e => e.currentTarget.style.background=C.marrom}>
-            + Adicionar clínica
-          </button>
+          {(currentUser?.role === 'super_admin' || currentUser?.permissoes?.includes('criar_clinicas')) && (
+            <button onClick={() => setShowModal(true)}
+              style={{ padding:'10px 22px', borderRadius:10, background:C.marrom, color:C.branco, border:'none', cursor:'pointer', fontSize:13, fontWeight:700, fontFamily:'inherit', display:'flex', alignItems:'center', gap:8, transition:'all 0.15s' }}
+              onMouseEnter={e => e.currentTarget.style.background=C.marromHover}
+              onMouseLeave={e => e.currentTarget.style.background=C.marrom}>
+              + Adicionar clínica
+            </button>
+          )}
         </div>
 
         {/* Busca local */}
