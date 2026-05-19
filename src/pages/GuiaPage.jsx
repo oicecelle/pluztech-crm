@@ -696,15 +696,15 @@ const ProcedimentosSection = ({ clinicId }) => {
 const SECOES = [
   { id:'crm',          label:'CRM',                  icon:'📊' },
   { id:'automacoes',   label:'Automações',            icon:'⚡' },
-  { id:'info',         label:'Informações Gerais',    icon:'ℹ️' },
-  { id:'rotinas',      label:'Rotinas Operacionais',  icon:'✅' },
-  { id:'materiais',    label:'Biblioteca de Materiais',icon:'📁' },
-  { id:'scripts',      label:'Scripts',               icon:'💬' },
-  { id:'regras',       label:'Regras Gerais',         icon:'📋' },
-  { id:'procedimentos',label:'Procedimentos',         icon:'🔬' },
-  { id:'profissionais',label:'Agenda e Profissionais',icon:'👩‍⚕️' },
-  { id:'eventos',      label:'Eventos e Campanhas',   icon:'📣' },
-  { id:'faq',          label:'Perguntas Frequentes',  icon:'❓' },
+  { id:'info',         label:'Informações Gerais',    icon:'ℹ️', hideFor:['cliente'] },
+  { id:'rotinas',      label:'Rotinas Operacionais',  icon:'✅', hideFor:['cliente'] },
+  { id:'materiais',    label:'Biblioteca de Materiais',icon:'📁', hideFor:['cliente'] },
+  { id:'scripts',      label:'Scripts',               icon:'💬', hideFor:['cliente'] },
+  { id:'regras',       label:'Regras Gerais',         icon:'📋', hideFor:['cliente'] },
+  { id:'procedimentos',label:'Procedimentos',         icon:'🔬', hideFor:['cliente'] },
+  { id:'profissionais',label:'Agenda e Profissionais',icon:'👩‍⚕️', hideFor:['cliente'] },
+  { id:'eventos',      label:'Eventos e Campanhas',   icon:'📣', hideFor:['cliente'] },
+  { id:'faq',          label:'Perguntas Frequentes',  icon:'❓', hideFor:['cliente'] },
 ]
 
 // ─── PÁGINA PRINCIPAL DO GUIA ─────────────────────────────────
@@ -719,7 +719,11 @@ export default function GuiaPage({ clinic, onVoltar, CRMComponent, AutomacoesCom
   const { faqs, loading: lFaq, save: sFaq, remove: rFaq } = useFAQ(clinic.id)
 
   const isAdmin = currentUser?.role === 'super_admin' || currentUser?.role === 'admin_clinica'
-  const secoesFiltradas = SECOES.filter(s => (!s.adminOnly || isAdmin) && s.label.toLowerCase().includes(busca.toLowerCase()))
+  const secoesFiltradas = SECOES.filter(s => {
+    if (s.hideFor?.includes(currentUser?.role)) return false
+    if (s.id === 'automacoes' && !currentUser?.permissoes?.includes('ver_automacoes') && currentUser?.role !== 'super_admin') return false
+    return (!s.adminOnly || isAdmin) && s.label.toLowerCase().includes(busca.toLowerCase())
+  })
 
   return (
     <div style={{ display:'flex', height:'100vh', overflow:'hidden', fontFamily:"'DM Sans','Helvetica Neue',sans-serif", background:C.bg }}>
