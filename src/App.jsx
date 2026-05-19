@@ -567,7 +567,7 @@ function DisparoModal({leads,selected,templates,onClose,onCreateDisparo,onExecut
 
   const addParte=()=>setPartes(ps=>[...ps,{id:'p'+Date.now(),tipo:'texto',conteudo:'',delay_ms:2000}])
   const remParte=id=>setPartes(ps=>ps.filter(p=>p.id!==id))
-  const updParte=(id,k,v)=>setPartes(ps=>ps.map(p=>p.id===id?{...p,[k]:v}:p))
+  const updParte=(id,k,v)=>setPartes(ps=>ps.map(p=>p.id===id?{...p,[k]:typeof v==='function'?v(p[k]):v}:p))
 
   // Para compatibilidade: textoBase = conteúdo da 1ª parte texto (preview de variáveis)
   const template=templates.find(t=>t.id===templateId)
@@ -1276,36 +1276,53 @@ function CRMInline({ clinic, clinics, estagios, statusList, etiquetas, interesse
             {(disparos||[]).map(d=>{
               const statusColor={'rascunho':'#F59E0B','pendente':'#F59E0B','enviando':D.accent,'completo':D.success,'erro':D.danger,'cancelado':D.sub}[d.status]||D.sub
               const isPendente=['rascunho','pendente','cancelado'].includes(d.status)
-              const isExecutando=executandoHistorico===d.id
+              const st=d.status
+              const cor=st==='completo'?D.success:st==='erro'?D.danger:st==='enviando'?D.accent:st==='cancelado'?'#F59E0B':D.sub
               return(
-                <div key={d.id} style={{background:D.card,border:`1px solid ${D.border}`,borderRadius:10,padding:'12px 16px',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
-                  <div style={{flex:1,minWidth:200}}>
-                    <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
-                      <span style={{background:statusColor+'22',color:statusColor,border:`1px solid ${statusColor}44`,borderRadius:99,padding:'2px 10px',fontSize:11,fontWeight:700}}>{d.status}</span>
-                      <span style={{fontSize:12,color:D.sub}}>{new Date(d.created_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</span>
-                      {d.agendado_para&&<span style={{fontSize:11,color:'#F59E0B'}}>Agendado: {new Date(d.agendado_para).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</span>}
+                <div key={d.id} style={{background:D.input,borderRadius:10,padding:'12px 14px',border:`1px solid ${D.border}`}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                    <div>
+                      <div style={{fontSize:13,fontWeight:600,color:D.text}}>{d.mensagem_base?.slice(0,60)||(d.template_id?'Via template':'—')}{d.mensagem_base?.length>60?'...':''}</div>
+                      <div style={{display:'flex',gap:8,alignItems:'center',marginTop:4}}>
+                        <span style={{fontSize:11,color:cor,fontWeight:600}}>{(st||'rascunho').toUpperCase()}</span>
+                        <span style={{fontSize:11,color:D.sub}}>{d.total_leads} leads</span>
+                        {d.total_enviados>0&&<span style={{fontSize:11,color:D.success}}>✓ {d.total_enviados}</span>}
+                        {d.total_erros>0&&<span style={{fontSize:11,color:D.danger}}>✗ {d.total_erros}</span>}
+                        {d.agendado_para&&<span style={{fontSize:11,color:'#F59E0B'}}>Agendado: {new Date(d.agendado_para).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</span>}
+                      </div>
                     </div>
-                    <div style={{fontSize:12,color:D.text,fontStyle:'italic',maxWidth:400,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>"{d.mensagem_base?.slice(0,80)}{d.mensagem_base?.length>80?'…':''}"</div>
-                    <div style={{fontSize:11,color:D.sub,marginTop:4,display:'flex',gap:12}}>
-                      <span>Total: <strong style={{color:D.text}}>{d.total_leads}</strong></span>
-                      {d.total_enviados!=null&&<span>Enviados: <strong style={{color:D.success}}>{d.total_enviados}</strong></span>}
-                      {d.total_erros>0&&<span>Erros: <strong style={{color:D.danger}}>{d.total_erros}</strong></span>}
-                      <span>Intervalo: <strong style={{color:D.text}}>{d.intervalo_tipo==='aleatorio'?'Aleatório (1–4min)':`${d.intervalo_segundos}s`}</strong></span>
+                    <div style={{display:'flex',gap:6}}>
+                      {(st==='rascunho'||st==='agendado')&&(
+                        <>
+                          <Btn variant="accent" size="sm" onClick={async()=>{
+                            setExecutandoHistorico(d.id)
+                            showT(`Iniciando disparo de ${d.total_leads} leads...`)
+                            const res=await executarDisparo(d.id,(prog)=>{
+                              showT(`Enviando ${prog.idx}/${prog.total}...`)
+                            })
+                            setExecutandoHistorico(null)
+                            if(res?.error) showT(res.error)
+                            else showT(`Disparo finalizado: ${res.enviados} enviados, ${res.erros} erros`)
+                            refetchDisparos?.()
+                          }} disabled={executandoHistorico===d.id}>
+                            {executandoHistorico===d.id?'Enviando...':'▶ Executar'}
+                          </Btn>
+                          <Btn variant="danger" size="sm" onClick={async()=>{
+                            if(!window.confirm('Cancelar este disparo?')) return
+                            await supabase.from('disparos').update({status:'cancelado'}).eq('id',d.id)
+                            showT('Disparo cancelado')
+                            refetchDisparos?.()
+                          }}>✕ Cancelar</Btn>
+                        </>
+                      )}
+                      {st==='enviando'&&(
+                        <Btn variant="danger" size="sm" onClick={()=>{
+                          cancelarExecucao?.()
+                          showT('Interrupção solicitada...')
+                        }}>⏹ Interromper</Btn>
+                      )}
                     </div>
                   </div>
-                  {isPendente&&(
-                    <Btn variant="primary" size="sm" disabled={isExecutando} onClick={async()=>{
-                      setExecutandoHistorico(d.id)
-                      showT(`Iniciando disparo de ${d.total_leads} leads...`)
-                      const res=await executarDisparo(d.id,(prog)=>{
-                        // progress tracked internally, just refresh on done
-                      })
-                      setExecutandoHistorico(null)
-                      if(res?.error) showT(res.error,'error')
-                      else showT(`Concluído! ${res.enviados} enviados, ${res.erros} erros.`,res.erros>0&&res.enviados===0?'error':'success')
-                      refetchDisparos?.()
-                    }}>{isExecutando?'Executando...':'Executar'}</Btn>
-                  )}
                 </div>
               )
             })}
