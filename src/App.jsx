@@ -564,6 +564,26 @@ function DisparoModal({leads,selected,templates,onClose,onCreateDisparo,onExecut
   const [progresso,setProgresso]=useState({total:0,enviados:0,erros:0,idx:0,atual:null})
   const [resultado,setResultado]=useState(null)
   const [erroMsg,setErroMsg]=useState(null)
+  const [uploading,setUploading]=useState({})
+
+  // Upload de arquivo para Supabase Storage
+  const handleFileUpload=async(parteId, file)=>{
+    if(!file) return
+    setUploading(u=>({...u,[parteId]:true}))
+    try{
+      const ext=file.name.split('.').pop()
+      const path=`disparos/${Date.now()}_${Math.random().toString(36).slice(2,8)}.${ext}`
+      const{error}=await supabase.storage.from('disparos').upload(path,file,{contentType:file.type,upsert:false})
+      if(error) throw error
+      const{data:{publicUrl}}=supabase.storage.from('disparos').getPublicUrl(path)
+      updParte(parteId,'conteudo',publicUrl)
+      updParte(parteId,'_fileName',file.name)
+    }catch(e){
+      alert('Erro no upload: '+(e.message||'Tente novamente'))
+    }finally{
+      setUploading(u=>({...u,[parteId]:false}))
+    }
+  }
 
   const addParte=()=>setPartes(ps=>[...ps,{id:'p'+Date.now(),tipo:'texto',conteudo:'',delay_ms:2000}])
   const remParte=id=>setPartes(ps=>ps.filter(p=>p.id!==id))
@@ -752,9 +772,37 @@ function DisparoModal({leads,selected,templates,onClose,onCreateDisparo,onExecut
                         </div>
                       </>
                     ):(
-                      <input value={parte.conteudo} onChange={e=>updParte(parte.id,'conteudo',e.target.value)}
-                        placeholder={`URL do ${parte.tipo} (https://...)`}
-                        style={{width:'100%',border:`1px solid ${D.border}`,borderRadius:8,padding:'8px 12px',fontSize:13,outline:'none',fontFamily:'monospace',background:D.input,color:D.text,boxSizing:'border-box'}}/>
+                      <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                        {/* Upload button */}
+                        <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                          <label style={{padding:'7px 14px',borderRadius:8,fontSize:12,fontWeight:600,cursor:uploading[parte.id]?'wait':'pointer',border:`1.5px solid ${D.accent}`,background:D.accent+'22',color:D.accent,fontFamily:'inherit',display:'inline-flex',alignItems:'center',gap:6}}>
+                            {uploading[parte.id]?'⏳ Enviando...':('📎 Enviar '+parte.tipo)}
+                            <input type="file" style={{display:'none'}} disabled={uploading[parte.id]}
+                              accept={parte.tipo==='imagem'?'image/*':parte.tipo==='audio'?'audio/*':parte.tipo==='documento'?'.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt':'*/*'}
+                              onChange={e=>{handleFileUpload(parte.id,e.target.files[0]);e.target.value=''}}/>
+                          </label>
+                          <span style={{fontSize:11,color:D.sub}}>ou cole a URL abaixo</span>
+                        </div>
+                        {/* URL input */}
+                        <input value={parte.conteudo} onChange={e=>updParte(parte.id,'conteudo',e.target.value)}
+                          placeholder={`URL do ${parte.tipo} (https://...)`}
+                          style={{width:'100%',border:`1px solid ${D.border}`,borderRadius:8,padding:'8px 12px',fontSize:12,outline:'none',fontFamily:'monospace',background:D.input,color:D.text,boxSizing:'border-box'}}/>
+                        {/* Preview */}
+                        {parte.conteudo&&(
+                          <div style={{borderRadius:8,overflow:'hidden',border:`1px solid ${D.border}`,background:'#0a0a0a'}}>
+                            {parte.tipo==='imagem'?(
+                              <img src={parte.conteudo} alt="preview" style={{maxWidth:'100%',maxHeight:120,objectFit:'contain',display:'block'}}
+                                onError={e=>{e.target.style.display='none'}}/>
+                            ):parte.tipo==='audio'?(
+                              <audio controls src={parte.conteudo} style={{width:'100%',height:36}}/>
+                            ):(
+                              <div style={{padding:'8px 12px',fontSize:11,color:D.success,display:'flex',alignItems:'center',gap:6}}>
+                                ✓ {parte._fileName||'Arquivo carregado'} — <a href={parte.conteudo} target="_blank" rel="noopener noreferrer" style={{color:D.accent,textDecoration:'underline'}}>abrir</a>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     )}
                     {idx<partes.length-1&&(
                       <div style={{display:'flex',alignItems:'center',gap:6,marginTop:6}}>
