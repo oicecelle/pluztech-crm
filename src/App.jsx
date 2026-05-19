@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
+import * as XLSX from 'xlsx'
 import { supabase } from './lib/supabase'
 import { useClinics, useCRMConfig, useLeads, useTemplates, useDisparos } from './hooks/useCRM'
 import CentralClinicas from './pages/CentralClinicas'
@@ -1123,6 +1124,34 @@ function CRMInline({ clinic, clinics, estagios, statusList, etiquetas, interesse
     showT(`${ok} leads importados${fail>0?`, ${fail} com erro`:''}!`, fail>0?'error':'success')
   }
 
+  const handleExportarExcel=()=>{
+    if(filteredLeads.length===0){showT('Nenhum lead para exportar','error');return}
+    const data = filteredLeads.map(l=>{
+      const est=getEstagio(l.estagio_id)
+      const sta=getStatus(l.status_id)
+      const tags=getEtiquetas(l.etiquetas).map(t=>t.nome).join(', ')
+      const ints=getInteresses(l.interesses).map(i=>i.nome).join(', ')
+      return {
+        'Nome': l.nome,
+        'Sobrenome': l.sobrenome||'',
+        'WhatsApp': l.whatsapp||'',
+        'Email': l.email||'',
+        'Estágio': est?est.nome:'',
+        'Status': sta?sta.nome:'',
+        'Interesses': ints,
+        'Etiquetas': tags,
+        'Origem': l.origem||'',
+        'Data Cadastro': fmtDate(l.data_cadastro),
+        'Valor (R$)': l.valor||''
+      }
+    })
+    const ws = XLSX.utils.json_to_sheet(data)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, "Leads")
+    XLSX.writeFile(wb, `leads_export_${new Date().getTime()}.xlsx`)
+    showT('Exportação concluída com sucesso!')
+  }
+
   const thS={padding:'10px 14px',textAlign:'left',fontSize:11,fontWeight:700,color:D.sub,letterSpacing:'0.06em',borderBottom:`1px solid ${D.border}`,whiteSpace:'nowrap',background:D.cardAlt}
   const tdS={padding:'11px 14px',borderBottom:`1px solid ${D.border}22`,verticalAlign:'middle'}
 
@@ -1136,6 +1165,7 @@ function CRMInline({ clinic, clinics, estagios, statusList, etiquetas, interesse
         </div>
         <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
           {selected.length>0&&<Btn variant="secondary" size="sm" onClick={()=>setShowDisparo(true)}>📤 Disparar ({selected.length})</Btn>}
+          <Btn variant="secondary" size="sm" onClick={handleExportarExcel}>📊 Exportar</Btn>
           <Btn variant="secondary" size="sm" onClick={()=>setShowImportar(true)}>📥 Importar</Btn>
           <Btn variant="secondary" size="sm" onClick={()=>setShowModelos(true)}>📝 Modelos</Btn>
           <Btn variant="secondary" size="sm" onClick={()=>setShowConfig(true)}>⚙ Configurar</Btn>
@@ -1174,6 +1204,9 @@ function CRMInline({ clinic, clinics, estagios, statusList, etiquetas, interesse
       </div>
 
       {/* Tabela */}
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8,padding:'0 4px'}}>
+        <span style={{fontSize:12,fontWeight:600,color:D.sub}}>{filteredLeads.length} de {leads.length} leads {selected.length>0&&` · ${selected.length} selecionados`}</span>
+      </div>
       <div style={{background:D.card,border:`1px solid ${D.border}`,borderRadius:12,overflow:'hidden'}}>
         {leadsLoading?<Spinner/>:(
           <div style={{overflowX:'auto'}}>
@@ -1227,9 +1260,6 @@ function CRMInline({ clinic, clinics, estagios, statusList, etiquetas, interesse
             </table>
           </div>
         )}
-        <div style={{padding:'10px 16px',borderTop:`1px solid ${D.border}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-          <span style={{fontSize:12,color:D.sub}}>{filteredLeads.length} leads · {selected.length} selecionados</span>
-        </div>
       </div>
 
       {/* Histórico de Disparos */}
