@@ -242,8 +242,10 @@ export function PainelAdmin({ clinics, currentUser }) {
         await supabase.from('clinic_users').delete().eq('user_id', editando.id)
         if (clinicas?.length) await supabase.from('clinic_users').insert(clinicas.map(cid => ({ user_id: editando.id, clinic_id: cid })))
       } else {
-        const { data: authData, error: authError } = await supabase.auth.admin.createUser({ email: form.email, password: form.senha, email_confirm: true })
-        if (authError) throw authError
+        const { data: res, error: invokeError } = await supabase.functions.invoke('create-user', { body: { email: form.email, password: form.senha } })
+        if (invokeError) throw invokeError
+        if (res?.error) throw new Error(res.error)
+        const authData = { user: res.user }
         const { data: newUser, error: dbError } = await supabase.from('users').insert({ auth_id: authData.user.id, name: form.name, email: form.email, role: form.role, ativo: form.ativo, permissoes: form.permissoes }).select().single()
         if (dbError) throw dbError
         if (form.clinicas?.length) await supabase.from('clinic_users').insert(form.clinicas.map(cid => ({ user_id: newUser.id, clinic_id: cid })))
