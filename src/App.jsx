@@ -94,7 +94,7 @@ const Dashboard=({leads})=>{
 
 // ─── LEAD MODAL ──────────────────────────────────────────────
 const LeadModal=({lead,onClose,estagios,statusList,etiquetas,interesses,onSave,saving,onDelete})=>{
-  const blank={nome:'',sobrenome:'',whatsapp:'',email:'',origem:'',estagio_id:'',status_id:'',interesses:[],etiquetas:[],aguardando_retorno:false,fechou:false,sinal_pago:false,valor:'',valor_sinal:'',proximo_agendamento_data:'',proximo_agendamento_horario:'',proximo_agendamento_local:'',proximo_agendamento_procedimento:'',ultima_interacao_contexto:'',observacoes:'',como_conheceu:'',cidade_bairro:'',indicado_por:'',numero_sessoes:'',ja_foi_cliente:false}
+  const blank={nome:'',sobrenome:'',whatsapp:'',email:'',origem:'',estagio_id:'',status_id:'',interesses:[],etiquetas:[],aguardando_retorno:false,fechou:false,sinal_pago:false,valor:'',valor_sinal:'',proximo_agendamento_data:'',proximo_agendamento_horario:'',proximo_agendamento_local:'',proximo_agendamento_procedimento:'',ultima_interacao_contexto:'',observacoes:'',como_conheceu:'',cidade_bairro:'',indicado_por:'',numero_sessoes:'',ja_foi_cliente:false,tipo_lead:'novo',resumo_conversa:''}
   const [form,setForm]=useState(lead?{...lead}:blank)
   const [tab,setTab]=useState('dados')
   const set=(k,v)=>setForm(f=>({...f,[k]:v}))
@@ -112,7 +112,12 @@ const LeadModal=({lead,onClose,estagios,statusList,etiquetas,interesses,onSave,s
 
   return(
     <Modal open onClose={onClose} title={lead?`${lead.nome} ${lead.sobrenome||''}`:'Novo Lead'} width={680}>
-      <div style={{display:'flex',borderBottom:`1px solid ${D.border}`,marginBottom:20,marginTop:-8}}>
+      {lead && lead.tipo_lead && (
+        <div style={{display:'inline-block', padding:'2px 8px', borderRadius:99, fontSize:11, fontWeight:700, color:lead.tipo_lead==='novo'?'#3b82f6':'#a855f7', background:lead.tipo_lead==='novo'?'rgba(59,130,246,0.15)':'rgba(168,85,247,0.15)', border:`1px solid ${lead.tipo_lead==='novo'?'rgba(59,130,246,0.4)':'rgba(168,85,247,0.4)'}`, marginBottom:16, marginTop:-10}}>
+          {lead.tipo_lead === 'novo' ? 'NOVO LEAD' : 'PACIENTE EXISTENTE'}
+        </div>
+      )}
+      <div style={{display:'flex',borderBottom:`1px solid ${D.border}`,marginBottom:20,marginTop:lead?.tipo_lead?0:-8}}>
         {[['dados','Dados'],['agendamento','Agendamento'],['extras','Extras']].map(([k,l])=><button key={k} style={tabS(tab===k)} onClick={()=>setTab(k)}>{l}</button>)}
       </div>
       {tab==='dados'&&(
@@ -152,6 +157,14 @@ const LeadModal=({lead,onClose,estagios,statusList,etiquetas,interesses,onSave,s
               </label>
             ))}
           </div>
+          {form.resumo_conversa && (
+            <div style={{gridColumn:'1/-1'}}>
+              <label style={{...labelStyle, color:D.accent, display:'flex', alignItems:'center', gap:6}}>✨ RESUMO DA CONVERSA (IA)</label>
+              <div style={{background:D.accent+'11', border:`1px solid ${D.accent}33`, borderRadius:8, padding:'10px 14px', fontSize:13, color:D.text, lineHeight:1.5, whiteSpace:'pre-wrap'}}>
+                {form.resumo_conversa}
+              </div>
+            </div>
+          )}
           <div style={{gridColumn:'1/-1'}}><label style={labelStyle}>ÚLTIMA INTERAÇÃO</label><textarea value={form.ultima_interacao_contexto||''} onChange={e=>set('ultima_interacao_contexto',e.target.value)} rows={2} style={{...inputStyle,resize:'vertical'}}/></div>
           <div style={{gridColumn:'1/-1'}}><label style={labelStyle}>OBSERVAÇÕES</label><textarea value={form.observacoes||''} onChange={e=>set('observacoes',e.target.value)} rows={2} style={{...inputStyle,resize:'vertical'}}/></div>
         </div>
@@ -618,7 +631,7 @@ function DisparoModal({leads,selected,templates,onClose,onCreateDisparo,onExecut
       agendado_para:agendadoPara||null,
       intervalo_tipo:intervalo,
       intervalo_segundos:intervalo==='fixo'?intervaloFixo:null,
-      status:'rascunho',
+      status:agendadoPara?'agendado':'rascunho',
     }
 
     // Salvar no banco
@@ -704,7 +717,7 @@ function DisparoModal({leads,selected,templates,onClose,onCreateDisparo,onExecut
             <div style={{fontSize:40,marginBottom:12}}>🗓</div>
             <div style={{fontSize:15,fontWeight:700,color:D.text,marginBottom:6}}>Mensagens agendadas</div>
             <div style={{fontSize:13,color:D.sub}}>{resultado.total} mensagens programadas para {new Date(resultado.agendadoPara).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</div>
-            <div style={{fontSize:12,color:'#F59E0B',marginTop:10}}>Para executar no horário, abra o sistema e clique em "Executar" no Histórico de Disparos.</div>
+            <div style={{fontSize:12,color:'#F59E0B',marginTop:10}}>O disparo será executado automaticamente em segundo plano no horário programado.</div>
           </div>
         ):(
           <div style={{display:'flex',gap:12}}>
@@ -1278,7 +1291,14 @@ function CRMInline({ clinic, clinics, estagios, statusList, etiquetas, interesse
                       <td style={tdS} onClick={e=>{e.stopPropagation();toggle(lead.id)}}><input type="checkbox" checked={isSel} onChange={()=>toggle(lead.id)} onClick={e=>e.stopPropagation()} style={{width:15,height:15,cursor:'pointer',accentColor:D.accent}}/></td>
                       <td style={tdS} onClick={()=>setOpenLead(lead)}>
                         <div style={{fontWeight:600,fontSize:13,color:D.text}}>{lead.nome} {lead.sobrenome}</div>
-                        {lead.aguardando_retorno&&<div style={{fontSize:10,color:'#F59E0B',fontWeight:600,marginTop:2}}>● Aguardando</div>}
+                        <div style={{display:'flex', gap:6, marginTop:4, alignItems:'center', flexWrap:'wrap'}}>
+                          {lead.tipo_lead && (
+                            <span style={{fontSize:9, padding:'1px 6px', borderRadius:99, fontWeight:700, color:lead.tipo_lead==='novo'?'#3b82f6':'#a855f7', background:lead.tipo_lead==='novo'?'rgba(59,130,246,0.15)':'rgba(168,85,247,0.15)', border:`1px solid ${lead.tipo_lead==='novo'?'rgba(59,130,246,0.4)':'rgba(168,85,247,0.4)'}`}}>
+                              {lead.tipo_lead === 'novo' ? 'NOVO' : 'PACIENTE'}
+                            </span>
+                          )}
+                          {lead.aguardando_retorno&&<span style={{fontSize:10,color:'#F59E0B',fontWeight:600}}>● Aguardando</span>}
+                        </div>
                       </td>
                       <td style={tdS} onClick={()=>setOpenLead(lead)}><span style={{fontSize:12,color:D.sub,fontFamily:'monospace'}}>{lead.whatsapp}</span></td>
                       <td style={tdS} onClick={()=>setOpenLead(lead)}>{est?<Badge cor={est.cor} label={est.nome}/>:<span style={{color:D.border,fontSize:12}}>—</span>}</td>
@@ -1322,10 +1342,10 @@ function CRMInline({ clinic, clinics, estagios, statusList, etiquetas, interesse
           <div style={{display:'flex',flexDirection:'column',gap:8}}>
             {(!disparos||disparos.length===0)&&<div style={{fontSize:13,color:D.sub,padding:'12px 0'}}>Nenhum disparo criado ainda.</div>}
             {(disparos||[]).map(d=>{
-              const statusColor={'rascunho':'#F59E0B','pendente':'#F59E0B','enviando':D.accent,'completo':D.success,'erro':D.danger,'cancelado':D.sub}[d.status]||D.sub
-              const isPendente=['rascunho','pendente','cancelado'].includes(d.status)
+              const statusColor={'rascunho':'#F59E0B','agendado':'#F59E0B','pendente':'#F59E0B','enviando':D.accent,'completo':D.success,'erro':D.danger,'cancelado':D.sub}[d.status]||D.sub
+              const isPendente=['rascunho','agendado','pendente','cancelado'].includes(d.status)
               const st=d.status
-              const cor=st==='completo'?D.success:st==='erro'?D.danger:st==='enviando'?D.accent:st==='cancelado'?'#F59E0B':D.sub
+              const cor=st==='completo'?D.success:st==='erro'?D.danger:st==='enviando'?D.accent:['cancelado','agendado'].includes(st)?'#F59E0B':D.sub
               return(
                 <div key={d.id} style={{background:D.input,borderRadius:10,padding:'12px 14px',border:`1px solid ${D.border}`}}>
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>

@@ -340,7 +340,7 @@ export function useDisparos(clinicId) {
       .single()
 
     // 4. Marcar disparo como 'enviando'
-    await supabase.from('disparos').update({ status: 'enviando' }).eq('id', disparoId)
+    await supabase.from('disparos').update({ status: 'enviando', proximo_envio_apos: new Date().toISOString() }).eq('id', disparoId)
 
     setExecutando(true)
     cancelRef.current = false
@@ -437,6 +437,8 @@ export function useDisparos(clinicId) {
         const delayMs = disparoData?.intervalo_tipo === 'aleatorio'
           ? Math.round((60 + Math.random() * 180) * 1000)   // 1 a 4 min
           : (disparoData?.intervalo_segundos || 60) * 1000
+        const proximo = new Date(Date.now() + delayMs).toISOString()
+        await supabase.from('disparos').update({ proximo_envio_apos: proximo }).eq('id', disparoId)
         await new Promise(r => setTimeout(r, delayMs))
       }
     }
