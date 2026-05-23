@@ -66,7 +66,7 @@ const Input = ({ label, value, onChange, type='text', placeholder='', required=f
   <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
     {label && <label style={{ fontSize:11, fontWeight:700, color:C.cinza, letterSpacing:'0.05em' }}>{label}{required && <span style={{ color:C.vermelho }}> *</span>}</label>}
     <input type={type} value={value||''} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
-      style={{ border:`1px solid ${C.borda}`, borderRadius:8, padding:'9px 12px', fontSize:13, color:C.preto, background:C.creme, outline:'none', fontFamily:'inherit', color:C.preto }} />
+      style={{ border:`1px solid ${C.borda}`, borderRadius:8, padding:'9px 12px', fontSize:13, color:C.preto, background:C.creme, outline:'none', fontFamily:'inherit' }} />
   </div>
 )
 
