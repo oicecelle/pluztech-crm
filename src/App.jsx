@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import * as XLSX from 'xlsx'
 import { supabase } from './lib/supabase'
 import { useClinics, useCRMConfig, useLeads, useTemplates, useDisparos } from './hooks/useCRM'
+import { useOrigens } from './hooks/useGuia'
 import CentralClinicas from './pages/CentralClinicas'
 import GuiaPage from './pages/GuiaPage'
 import AutomacoesPage from './pages/AutomacoesPage'
@@ -93,7 +94,7 @@ const Dashboard=({leads})=>{
 }
 
 // ─── LEAD MODAL ──────────────────────────────────────────────
-const LeadModal=({lead,onClose,estagios,statusList,etiquetas,interesses,onSave,saving,onDelete})=>{
+const LeadModal=({lead,onClose,estagios,statusList,etiquetas,interesses,origens,onSave,saving,onDelete})=>{
   const blank={nome:'',sobrenome:'',whatsapp:'',email:'',origem:'',estagio_id:'',status_id:'',interesses:[],etiquetas:[],aguardando_retorno:false,fechou:false,sinal_pago:false,valor:'',valor_sinal:'',proximo_agendamento_data:'',proximo_agendamento_horario:'',proximo_agendamento_local:'',proximo_agendamento_procedimento:'',ultima_interacao_contexto:'',observacoes:'',como_conheceu:'',cidade_bairro:'',indicado_por:'',numero_sessoes:'',ja_foi_cliente:false,tipo_lead:'novo',resumo_conversa:''}
   const [form,setForm]=useState(lead?{...lead}:blank)
   const [tab,setTab]=useState('dados')
@@ -112,12 +113,20 @@ const LeadModal=({lead,onClose,estagios,statusList,etiquetas,interesses,onSave,s
 
   return(
     <Modal open onClose={onClose} title={lead?`${lead.nome} ${lead.sobrenome||''}`:'Novo Lead'} width={680}>
-      {lead && lead.tipo_lead && (
-        <div style={{display:'inline-block', padding:'2px 8px', borderRadius:99, fontSize:11, fontWeight:700, color:lead.tipo_lead==='novo'?'#3b82f6':'#a855f7', background:lead.tipo_lead==='novo'?'rgba(59,130,246,0.15)':'rgba(168,85,247,0.15)', border:`1px solid ${lead.tipo_lead==='novo'?'rgba(59,130,246,0.4)':'rgba(168,85,247,0.4)'}`, marginBottom:16, marginTop:-10}}>
-          {lead.tipo_lead === 'novo' ? 'NOVO LEAD' : 'PACIENTE EXISTENTE'}
+      {lead && (
+        <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16, marginTop:-10, flexWrap:'wrap', gap:10}}>
+          {lead.tipo_lead && (
+            <div style={{display:'inline-block', padding:'2px 8px', borderRadius:99, fontSize:11, fontWeight:700, color:lead.tipo_lead==='novo'?'#3b82f6':'#a855f7', background:lead.tipo_lead==='novo'?'rgba(59,130,246,0.15)':'rgba(168,85,247,0.15)', border:`1px solid ${lead.tipo_lead==='novo'?'rgba(59,130,246,0.4)':'rgba(168,85,247,0.4)'}`}}>
+              {lead.tipo_lead === 'novo' ? 'NOVO LEAD' : 'PACIENTE EXISTENTE'}
+            </div>
+          )}
+          <div style={{fontSize:11, color:D.sub, display:'flex', gap:12}}>
+            <span>📅 Cadastro: {fmtDateTime(form.data_cadastro)}</span>
+            <span>🔄 Última Atualização: {fmtDateTime(form.data_ultima_interacao || form.data_cadastro)}</span>
+          </div>
         </div>
       )}
-      <div style={{display:'flex',borderBottom:`1px solid ${D.border}`,marginBottom:20,marginTop:lead?.tipo_lead?0:-8}}>
+      <div style={{display:'flex',borderBottom:`1px solid ${D.border}`,marginBottom:20,marginTop:lead?0:-8}}>
         {[['dados','Dados'],['agendamento','Agendamento'],['extras','Extras']].map(([k,l])=><button key={k} style={tabS(tab===k)} onClick={()=>setTab(k)}>{l}</button>)}
       </div>
       {tab==='dados'&&(
@@ -128,7 +137,13 @@ const LeadModal=({lead,onClose,estagios,statusList,etiquetas,interesses,onSave,s
           <Input label="Email" value={form.email} onChange={v=>set('email',v)} type="email"/>
           <Sel label="Estágio" value={form.estagio_id} onChange={v=>set('estagio_id',v)} options={estagios.map(e=>({value:e.id,label:e.nome}))}/>
           <Sel label="Status" value={form.status_id} onChange={v=>set('status_id',v)} options={statusList.map(s=>({value:s.id,label:s.nome}))}/>
-          <Sel label="Origem" value={form.origem} onChange={v=>set('origem',v)} options={['WhatsApp','Instagram','Indicação','Google','Outro'].map(o=>({value:o,label:o}))}/>
+          <Sel label="Origem" value={form.origem} onChange={v=>set('origem',v)} options={(() => {
+            const baseOptions = ['WhatsApp', 'Instagram', 'Indicação', 'Google', 'Outro'];
+            const dynamicNames = (origens || []).map(o => o.nome);
+            const currentLeadOrigem = lead?.origem ? [lead.origem] : [];
+            const combinedOptions = Array.from(new Set([...baseOptions, ...dynamicNames, ...currentLeadOrigem]));
+            return combinedOptions.map(o => ({ value: o, label: o }));
+          })()}/>
           <Input label="Valor (R$)" value={form.valor} onChange={v=>set('valor',v)} type="number"/>
           <div style={{gridColumn:'1/-1'}}>
             <label style={labelStyle}>INTERESSES</label>
@@ -157,15 +172,16 @@ const LeadModal=({lead,onClose,estagios,statusList,etiquetas,interesses,onSave,s
               </label>
             ))}
           </div>
-          {form.resumo_conversa && (
-            <div style={{gridColumn:'1/-1'}}>
-              <label style={{...labelStyle, color:D.accent, display:'flex', alignItems:'center', gap:6}}>✨ RESUMO DA CONVERSA (IA)</label>
-              <div style={{background:D.accent+'11', border:`1px solid ${D.accent}33`, borderRadius:8, padding:'10px 14px', fontSize:13, color:D.text, lineHeight:1.5, whiteSpace:'pre-wrap'}}>
-                {form.resumo_conversa}
-              </div>
-            </div>
-          )}
-          <div style={{gridColumn:'1/-1'}}><label style={labelStyle}>ÚLTIMA INTERAÇÃO</label><textarea value={form.ultima_interacao_contexto||''} onChange={e=>set('ultima_interacao_contexto',e.target.value)} rows={2} style={{...inputStyle,resize:'vertical'}}/></div>
+          <div style={{gridColumn:'1/-1'}}>
+            <label style={labelStyle}>RESUMO DA CONVERSA (IA)</label>
+            <textarea
+              value={form.resumo_conversa||''}
+              onChange={e=>set('resumo_conversa',e.target.value)}
+              rows={3}
+              placeholder="Nenhum resumo gerado pela IA ainda..."
+              style={{...inputStyle,resize:'vertical'}}
+            />
+          </div>
           <div style={{gridColumn:'1/-1'}}><label style={labelStyle}>OBSERVAÇÕES</label><textarea value={form.observacoes||''} onChange={e=>set('observacoes',e.target.value)} rows={2} style={{...inputStyle,resize:'vertical'}}/></div>
         </div>
       )}
@@ -176,13 +192,16 @@ const LeadModal=({lead,onClose,estagios,statusList,etiquetas,interesses,onSave,s
         <Input label="Local" value={form.proximo_agendamento_local} onChange={v=>set('proximo_agendamento_local',v)}/>
         {form.sinal_pago&&<Input label="Valor do sinal (R$)" value={form.valor_sinal} onChange={v=>set('valor_sinal',v)} type="number"/>}
       </div>)}
-      {tab==='extras'&&(<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
-        <Input label="Como conheceu" value={form.como_conheceu} onChange={v=>set('como_conheceu',v)}/>
-        <Input label="Cidade / Bairro" value={form.cidade_bairro} onChange={v=>set('cidade_bairro',v)}/>
-        <Input label="Indicado por" value={form.indicado_por} onChange={v=>set('indicado_por',v)}/>
-        <Input label="Nº de sessões" value={form.numero_sessoes} onChange={v=>set('numero_sessoes',v)} type="number"/>
-        <div style={{gridColumn:'1/-1'}}><label style={{display:'flex',alignItems:'center',gap:7,fontSize:13,color:D.text,cursor:'pointer'}}><input type="checkbox" checked={!!form.ja_foi_cliente} onChange={e=>set('ja_foi_cliente',e.target.checked)} style={{width:15,height:15,accentColor:D.accent}}/>Já foi cliente antes</label></div>
-      </div>)}
+      {tab==='extras'&&(
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
+          <Input label="Data de Cadastro" value={form.data_cadastro ? form.data_cadastro.slice(0, 16) : ''} onChange={v=>set('data_cadastro', v)} type="datetime-local"/>
+          <Input label="Como conheceu" value={form.como_conheceu} onChange={v=>set('como_conheceu',v)}/>
+          <Input label="Cidade / Bairro" value={form.cidade_bairro} onChange={v=>set('cidade_bairro',v)}/>
+          <Input label="Indicado por" value={form.indicado_por} onChange={v=>set('indicado_por',v)}/>
+          <Input label="Nº de sessões" value={form.numero_sessoes} onChange={v=>set('numero_sessoes',v)} type="number"/>
+          <div style={{gridColumn:'1/-1'}}><label style={{display:'flex',alignItems:'center',gap:7,fontSize:13,color:D.text,cursor:'pointer'}}><input type="checkbox" checked={!!form.ja_foi_cliente} onChange={e=>set('ja_foi_cliente',e.target.checked)} style={{width:15,height:15,accentColor:D.accent}}/>Já foi cliente antes</label></div>
+        </div>
+      )}
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:24,paddingTop:20,borderTop:`1px solid ${D.border}`}}>
         <div>
           {lead && <Btn variant="danger" onClick={handleDelete} disabled={saving}>Excluir lead</Btn>}
@@ -1104,7 +1123,7 @@ const ClinicGlobalSearch = ({ clinic }) => {
 }
 
 // ─── CRM INLINE ──────────────────────────────────────────────
-function CRMInline({ clinic, clinics, estagios, statusList, etiquetas, interesses, leads, leadsLoading, createLead, updateLead, deleteLead, updateClinic, deleteClinic, templates, createTemplate, deleteTemplate, createDisparo, executarDisparo, cancelarExecucao, disparos, refetchDisparos, configActions }) {
+function CRMInline({ clinic, clinics, estagios, statusList, etiquetas, interesses, leads, leadsLoading, createLead, updateLead, deleteLead, updateClinic, deleteClinic, templates, createTemplate, deleteTemplate, createDisparo, executarDisparo, cancelarExecucao, disparos, refetchDisparos, configActions, origens }) {
   const [filters,setFilters]=useState({busca:'',estagio:'',status:'',etiqueta:'',interesse:'',dataInicio:'',dataFim:''})
   const [selected,setSelected]=useState([])
   const [openLead,setOpenLead]=useState(null)
@@ -1120,16 +1139,25 @@ function CRMInline({ clinic, clinics, estagios, statusList, etiquetas, interesse
 
   const showT=(msg,type='success')=>{setToast({msg,type});setTimeout(()=>setToast(null),3000)}
 
-  const filteredLeads=useMemo(()=>leads.filter(l=>{
-    if(filters.busca){const b=filters.busca.toLowerCase();if(!(`${l.nome} ${l.sobrenome||''}`.toLowerCase().includes(b))&&!(l.whatsapp||'').includes(b))return false}
-    if(filters.estagio&&l.estagio_id!==filters.estagio)return false
-    if(filters.status&&l.status_id!==filters.status)return false
-    if(filters.etiqueta&&!(l.etiquetas||[]).includes(filters.etiqueta))return false
-    if(filters.interesse&&!(l.interesses||[]).includes(filters.interesse))return false
-    if(filters.dataInicio&&new Date(l.data_cadastro)<new Date(filters.dataInicio))return false
-    if(filters.dataFim&&new Date(l.data_cadastro)>new Date(filters.dataFim+'T23:59:59'))return false
-    return true
-  }),[leads,filters])
+  const filteredLeads=useMemo(()=>{
+    const filtered = leads.filter(l=>{
+      if(filters.busca){const b=filters.busca.toLowerCase();if(!(`${l.nome} ${l.sobrenome||''}`.toLowerCase().includes(b))&&!(l.whatsapp||'').includes(b))return false}
+      if(filters.estagio&&l.estagio_id!==filters.estagio)return false
+      if(filters.status&&l.status_id!==filters.status)return false
+      if(filters.etiqueta&&!(l.etiquetas||[]).includes(filters.etiqueta))return false
+      if(filters.interesse&&!(l.interesses||[]).includes(filters.interesse))return false
+      if(filters.dataInicio&&new Date(l.data_cadastro)<new Date(filters.dataInicio))return false
+      if(filters.dataFim&&new Date(l.data_cadastro)>new Date(filters.dataFim+'T23:59:59'))return false
+      return true
+    })
+    
+    // Sort by last activity (interaction, fallback to cadastro) descending
+    return filtered.sort((a, b) => {
+      const dateA = new Date(a.data_ultima_interacao || a.data_cadastro || 0).getTime()
+      const dateB = new Date(b.data_ultima_interacao || b.data_cadastro || 0).getTime()
+      return dateB - dateA
+    })
+  },[leads,filters])
 
   const getEstagio=id=>estagios.find(e=>e.id===id)
   const getStatus=id=>statusList.find(s=>s.id===id)
@@ -1165,7 +1193,8 @@ function CRMInline({ clinic, clinics, estagios, statusList, etiquetas, interesse
     // Timestamps: string vazia → null (Supabase rejeita "")
     if (!cleanForm.proximo_agendamento_data) cleanForm.proximo_agendamento_data = null
     if (!cleanForm.data_ultima_interacao) cleanForm.data_ultima_interacao = null
-    // WhatsApp vazio → null (coluna é NOT NULL no banco, remover via migration; por segurança trata aqui também)
+    if (!cleanForm.data_cadastro) delete cleanForm.data_cadastro
+    // WhatsApp vazio → null
     if (!cleanForm.whatsapp) cleanForm.whatsapp = null
     const{error}=form.id?await updateLead(form.id,cleanForm):await createLead(cleanForm)
     setSaving(false)
@@ -1203,6 +1232,8 @@ function CRMInline({ clinic, clinics, estagios, statusList, etiquetas, interesse
         'Etiquetas': tags,
         'Origem': l.origem||'',
         'Data Cadastro': fmtDate(l.data_cadastro),
+        'Última Atualização': fmtDateTime(l.data_ultima_interacao || l.data_cadastro),
+        'Resumo (IA)': l.resumo_conversa||'',
         'Valor (R$)': l.valor||''
       }
     })
@@ -1275,7 +1306,7 @@ function CRMInline({ clinic, clinics, estagios, statusList, etiquetas, interesse
               <thead>
                 <tr>
                   <th style={{...thS,width:40}}><input type="checkbox" checked={allSelected} onChange={toggleAll} style={{cursor:'pointer',width:15,height:15,accentColor:D.accent}}/></th>
-                  {['NOME','WHATSAPP','ESTÁGIO','STATUS','INTERESSES','ETIQUETAS','ORIGEM','CADASTRO','ÚLT. INTERAÇÃO','PRÓX. AGENDA','VALOR'].map(h=><th key={h} style={thS}>{h}</th>)}
+                  {['NOME','WHATSAPP','ESTÁGIO','STATUS','INTERESSES','ETIQUETAS','ORIGEM','CADASTRO','ÚLT. ATUALIZAÇÃO','RESUMO (IA)','PRÓX. AGENDA','VALOR'].map(h=><th key={h} style={thS}>{h}</th>)}
                 </tr>
               </thead>
               <tbody>
@@ -1308,8 +1339,17 @@ function CRMInline({ clinic, clinics, estagios, statusList, etiquetas, interesse
                       <td style={tdS} onClick={()=>setOpenLead(lead)}><span style={{fontSize:12,color:D.sub}}>{lead.origem||'—'}</span></td>
                       <td style={tdS} onClick={()=>setOpenLead(lead)}><span style={{fontSize:12,color:D.sub}}>{fmtDate(lead.data_cadastro)}</span></td>
                       <td style={tdS} onClick={()=>setOpenLead(lead)}>
-                        <div style={{fontSize:12,color:D.text}}>{timeAgo(lead.data_ultima_interacao)}</div>
-                        {lead.ultima_interacao_contexto&&<div style={{fontSize:11,color:D.sub,maxWidth:150,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{lead.ultima_interacao_contexto}</div>}
+                        <div style={{fontSize:12,color:D.text}}>{fmtDateTime(lead.data_ultima_interacao || lead.data_cadastro)}</div>
+                        <div style={{fontSize:11,color:D.sub}}>{timeAgo(lead.data_ultima_interacao || lead.data_cadastro)}</div>
+                      </td>
+                      <td style={tdS} onClick={()=>setOpenLead(lead)}>
+                        {lead.resumo_conversa ? (
+                          <div style={{fontSize:12,color:D.text,maxWidth:220,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={lead.resumo_conversa}>
+                            {lead.resumo_conversa}
+                          </div>
+                        ) : (
+                          <span style={{color:D.sub,fontSize:11}}>Sem resumo</span>
+                        )}
                       </td>
                       <td style={tdS} onClick={()=>setOpenLead(lead)}>
                         {lead.proximo_agendamento_data
@@ -1398,7 +1438,7 @@ function CRMInline({ clinic, clinics, estagios, statusList, etiquetas, interesse
         )}
       </div>
 
-      {(openLead||showNewLead)&&<LeadModal lead={openLead} onClose={()=>{setOpenLead(null);setShowNewLead(false)}} estagios={estagios} statusList={statusList} etiquetas={etiquetas} interesses={interesses} onSave={handleSaveLead} onDelete={handleDeleteLead} saving={saving}/>}
+      {(openLead||showNewLead)&&<LeadModal lead={openLead} onClose={()=>{setOpenLead(null);setShowNewLead(false)}} estagios={estagios} statusList={statusList} etiquetas={etiquetas} interesses={interesses} origens={origens} onSave={handleSaveLead} onDelete={handleDeleteLead} saving={saving}/>}
       {showDisparo&&<DisparoModal
         leads={leads}
         selected={selected}
@@ -1443,6 +1483,7 @@ export default function App() {
   const{leads,loading:leadsLoading,createLead,updateLead,deleteLead}=useLeads(clinicSelecionada?.id)
   const{templates,createTemplate,deleteTemplate}=useTemplates(clinicSelecionada?.id)
   const{createDisparo,executarDisparo,cancelarExecucao,disparos,refetch:refetchDisparos}=useDisparos(clinicSelecionada?.id)
+  const{origens}=useOrigens(clinicSelecionada?.id)
 
   if(authLoading) return(
     <div style={{minHeight:'100vh',background:D.bg,display:'flex',alignItems:'center',justifyContent:'center'}}>
@@ -1518,6 +1559,7 @@ export default function App() {
       disparos={disparos}
       refetchDisparos={refetchDisparos}
       configActions={configActions}
+      origens={origens}
     />
   )
 
