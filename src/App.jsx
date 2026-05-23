@@ -94,7 +94,7 @@ const Dashboard=({leads})=>{
 }
 
 // ─── LEAD MODAL ──────────────────────────────────────────────
-const LeadModal=({lead,onClose,estagios,statusList,etiquetas,interesses,origens,onSave,saving,onDelete})=>{
+const LeadModal=({lead,onClose,estagios,statusList,etiquetas,interesses,origens,onSave,saving,onDelete,addInteresse})=>{
   const blank={nome:'',sobrenome:'',whatsapp:'',email:'',origem:'',estagio_id:'',status_id:'',interesses:[],etiquetas:[],aguardando_retorno:false,fechou:false,sinal_pago:false,valor:'',valor_sinal:'',proximo_agendamento_data:'',proximo_agendamento_horario:'',proximo_agendamento_local:'',proximo_agendamento_procedimento:'',ultima_interacao_contexto:'',observacoes:'',como_conheceu:'',cidade_bairro:'',indicado_por:'',numero_sessoes:'',ja_foi_cliente:false,tipo_lead:'novo',resumo_conversa:''}
   const [form,setForm]=useState(lead?{...lead}:blank)
   const [tab,setTab]=useState('dados')
@@ -153,6 +153,28 @@ const LeadModal=({lead,onClose,estagios,statusList,etiquetas,interesses,origens,
                   border:(form.interesses||[]).includes(i.id)?`1.5px solid ${D.accent}`:`1.5px solid ${D.border}`,
                   background:(form.interesses||[]).includes(i.id)?D.accent+'22':'transparent',
                   color:(form.interesses||[]).includes(i.id)?D.accent:D.sub}}>{i.nome}</button>)}
+            </div>
+            <div style={{display:'flex',gap:8,marginTop:10,alignItems:'center'}}>
+              <input type="text" placeholder="Digitar novo interesse e pressionar Enter..."
+                onKeyDown={async e=>{
+                  if(e.key==='Enter'){
+                    e.preventDefault();
+                    const val=e.target.value.trim();
+                    if(!val)return;
+                    let found=interesses.find(i=>i.nome.toLowerCase()===val.toLowerCase());
+                    if(!found&&addInteresse){
+                      const res=await addInteresse(val);
+                      if(res?.data) found=res.data;
+                    }
+                    if(found){
+                      if(!(form.interesses||[]).includes(found.id)){
+                        set('interesses', [...(form.interesses||[]),found.id]);
+                      }
+                    }
+                    e.target.value='';
+                  }
+                }}
+                style={{border:`1px solid ${D.border}`,borderRadius:8,padding:'6px 12px',fontSize:12,color:D.text,background:D.input,outline:'none',fontFamily:'inherit',flex:1,maxWidth:320}}/>
             </div>
           </div>
           <div style={{gridColumn:'1/-1'}}>
@@ -1438,7 +1460,7 @@ function CRMInline({ clinic, clinics, estagios, statusList, etiquetas, interesse
         )}
       </div>
 
-      {(openLead||showNewLead)&&<LeadModal lead={openLead} onClose={()=>{setOpenLead(null);setShowNewLead(false)}} estagios={estagios} statusList={statusList} etiquetas={etiquetas} interesses={interesses} origens={origens} onSave={handleSaveLead} onDelete={handleDeleteLead} saving={saving}/>}
+      {(openLead||showNewLead)&&<LeadModal lead={openLead} onClose={()=>{setOpenLead(null);setShowNewLead(false)}} estagios={estagios} statusList={statusList} etiquetas={etiquetas} interesses={interesses} origens={origens} onSave={handleSaveLead} onDelete={handleDeleteLead} saving={saving} addInteresse={configActions.addInteresse}/>}
       {showDisparo&&<DisparoModal
         leads={leads}
         selected={selected}
