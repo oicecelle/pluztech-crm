@@ -6,6 +6,7 @@ import { useOrigens } from './hooks/useGuia'
 import CentralClinicas from './pages/CentralClinicas'
 import GuiaPage from './pages/GuiaPage'
 import AutomacoesPage from './pages/AutomacoesPage'
+import RelatoriosPage from './pages/RelatoriosPage'
 import { PainelAdmin, MinhaConta } from './pages/AdminPage'
 
 const fmtDate = d => d ? new Date(d).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'}) : '—'
@@ -115,14 +116,25 @@ const LeadModal=({lead,onClose,estagios,statusList,etiquetas,interesses,origens,
     <Modal open onClose={onClose} title={lead?`${lead.nome} ${lead.sobrenome||''}`:'Novo Lead'} width={680}>
       {lead && (
         <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16, marginTop:-10, flexWrap:'wrap', gap:10}}>
-          {lead.tipo_lead && (
-            <div style={{display:'inline-block', padding:'2px 8px', borderRadius:99, fontSize:11, fontWeight:700, color:lead.tipo_lead==='novo'?'#3b82f6':'#a855f7', background:lead.tipo_lead==='novo'?'rgba(59,130,246,0.15)':'rgba(168,85,247,0.15)', border:`1px solid ${lead.tipo_lead==='novo'?'rgba(59,130,246,0.4)':'rgba(168,85,247,0.4)'}`}}>
-              {lead.tipo_lead === 'novo' ? 'NOVO LEAD' : 'PACIENTE EXISTENTE'}
+          <div style={{display:'flex', alignItems:'center', gap:10}}>
+            {lead.foto_url ? (
+              <img src={lead.foto_url} alt={lead.nome} style={{width:40, height:40, borderRadius:'50%', objectFit:'cover', border:`2px solid ${lead.tipo_lead==='novo'?'#3b82f6':'#a855f7'}`}} />
+            ) : (
+              <div style={{width:40, height:40, borderRadius:'50%', background:lead.tipo_lead==='novo'?'rgba(59,130,246,0.15)':'rgba(168,85,247,0.15)', color:lead.tipo_lead==='novo'?'#3b82f6':'#a855f7', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700, fontSize:16, border:`1px solid ${lead.tipo_lead==='novo'?'rgba(59,130,246,0.3)':'rgba(168,85,247,0.3)'}`}}>
+                {lead.nome?.charAt(0).toUpperCase() || '?'}
+              </div>
+            )}
+            <div>
+              {lead.tipo_lead && (
+                <div style={{display:'inline-block', padding:'2px 8px', borderRadius:99, fontSize:11, fontWeight:700, color:lead.tipo_lead==='novo'?'#3b82f6':'#a855f7', background:lead.tipo_lead==='novo'?'rgba(59,130,246,0.15)':'rgba(168,85,247,0.15)', border:`1px solid ${lead.tipo_lead==='novo'?'rgba(59,130,246,0.4)':'rgba(168,85,247,0.4)'}`, marginBottom:4}}>
+                  {lead.tipo_lead === 'novo' ? 'NOVO LEAD' : 'PACIENTE EXISTENTE'}
+                </div>
+              )}
+              <div style={{fontSize:11, color:D.sub, display:'flex', gap:12}}>
+                <span>📅 Cadastro: {fmtDateTime(form.data_cadastro)}</span>
+                <span>🔄 Última Atualização: {fmtDateTime(form.data_ultima_interacao || form.data_cadastro)}</span>
+              </div>
             </div>
-          )}
-          <div style={{fontSize:11, color:D.sub, display:'flex', gap:12}}>
-            <span>📅 Cadastro: {fmtDateTime(form.data_cadastro)}</span>
-            <span>🔄 Última Atualização: {fmtDateTime(form.data_ultima_interacao || form.data_cadastro)}</span>
           </div>
         </div>
       )}
@@ -369,8 +381,44 @@ const CRMConfigModal=({onClose,clinic,updateClinic,deleteClinic,estagios,statusL
   const [clinicAtiva,setClinicAtiva]=useState(clinic?.ativo!==false)
   const [clinicSaving,setClinicSaving]=useState(false)
 
+  // Integration States
+  const [nome, setNome] = useState(clinic?.name || '')
+  const [whatsapp, setWhatsapp] = useState(clinic?.numero_whatsapp || '')
+  const [inboxId, setInboxId] = useState(clinic?.chatwoot_inbox_id || '')
+  const [accountId, setAccountId] = useState(clinic?.chatwoot_account_id || 1)
+  const [token, setToken] = useState('')
+  const [instance, setInstance] = useState('')
+  const [loadingConfig, setLoadingConfig] = useState(true)
+
+  useEffect(() => {
+    const loadIntegrationData = async () => {
+      if (!clinic?.id) return
+      setLoadingConfig(true)
+      try {
+        const { data: cc } = await supabase.from('clinicas_config').select('*').eq('nome', clinic.name).limit(1).maybeSingle()
+        const { data: hc } = await supabase.from('horario_comercial').select('*').eq('clinic_id', clinic.id).limit(1).maybeSingle()
+
+        if (cc) {
+          if (cc.numero_whatsapp) setWhatsapp(cc.numero_whatsapp)
+          if (cc.chatwoot_inbox_id) setInboxId(String(cc.chatwoot_inbox_id))
+          if (cc.chatwoot_account_id) setAccountId(cc.chatwoot_account_id)
+          if (cc.uazapi_token) setToken(cc.uazapi_token)
+        }
+        if (hc) {
+          if (hc.uazapi_token && !token) setToken(hc.uazapi_token)
+          if (hc.instancia) setInstance(hc.instancia)
+        }
+      } catch (err) {
+        console.error('Erro ao buscar dados de integração:', err)
+      }
+      setLoadingConfig(false)
+    }
+    loadIntegrationData()
+  }, [clinic])
+
   const tabData={
     geral:{label:'Geral',data:[],hasCor:false},
+    integ:{label:'Integração',data:[],hasCor:false},
     estagios:{label:'Estágios',data:estagios,add:()=>addEstagio(newNome,newCor),del:deleteEstagio,hasCor:true},
     status:{label:'Status',data:statusList,add:()=>addStatus(newNome,newCor),del:deleteStatus,hasCor:true},
     etiquetas:{label:'Etiquetas',data:etiquetas,add:()=>addEtiqueta(newNome,newCor),del:deleteEtiqueta,hasCor:true},
@@ -392,14 +440,83 @@ const CRMConfigModal=({onClose,clinic,updateClinic,deleteClinic,estagios,statusL
     setClinicSaving(false)
   }
 
+  const handleSaveIntegration = async () => {
+    setClinicSaving(true)
+    try {
+      // 1. Update clinics
+      const { error: clErr } = await supabase.from('clinics').update({
+        name: nome.trim(),
+        numero_whatsapp: whatsapp.trim() || null,
+        chatwoot_inbox_id: inboxId.trim() || null,
+        chatwoot_account_id: accountId ? Number(accountId) : null
+      }).eq('id', clinic.id)
+      if (clErr) throw clErr
+
+      // 2. Update/Upsert clinicas_config
+      const { data: ccData } = await supabase.from('clinicas_config').select('id').eq('nome', clinic.name).limit(1)
+      const configPayload = {
+        nome: nome.trim(),
+        numero_whatsapp: whatsapp.trim() || null,
+        chatwoot_inbox_id: inboxId ? Number(inboxId) : null,
+        chatwoot_account_id: accountId ? Number(accountId) : null,
+        uazapi_token: token.trim() || null,
+        status: 'ativo'
+      }
+      if (ccData && ccData.length > 0) {
+        const { error: ccErr } = await supabase.from('clinicas_config').update(configPayload).eq('nome', clinic.name)
+        if (ccErr) throw ccErr
+      } else {
+        const { error: ccErr } = await supabase.from('clinicas_config').insert(configPayload)
+        if (ccErr) throw ccErr
+      }
+
+      // 3. Update/Upsert horario_comercial
+      const { data: hcData } = await supabase.from('horario_comercial').select('id').eq('clinic_id', clinic.id).limit(1)
+      const horarioPayload = {
+        clinic_id: clinic.id,
+        uazapi_token: token.trim() || null,
+        instancia: instance.trim() || null,
+        ativo: true
+      }
+      if (hcData && hcData.length > 0) {
+        const { error: hcErr } = await supabase.from('horario_comercial').update(horarioPayload).eq('clinic_id', clinic.id)
+        if (hcErr) throw hcErr
+      } else {
+        const { error: hcErr } = await supabase.from('horario_comercial').insert({
+          ...horarioPayload,
+          hora_inicio: '08:00',
+          hora_fim: '18:00',
+          dias_semana: [1,2,3,4,5],
+          mensagem_fora: 'Olá! No momento estamos fora do horário de atendimento. Retornaremos em breve! 😊'
+        })
+        if (hcErr) throw hcErr
+      }
+
+      alert('Configuração de Integração salva com sucesso!')
+      onClose()
+      window.location.reload()
+    } catch(e) {
+      alert('Erro ao salvar integração: ' + e.message)
+    }
+    setClinicSaving(false)
+  }
+
   const handleDeleteClinic = async () => {
     if (window.confirm('Atenção: Você está prestes a excluir esta clínica. TODOS os leads, configurações e disparos associados a ela serão apagados permanentemente. Tem certeza absoluta?')) {
       if (window.confirm('Por favor, confirme novamente: Excluir a clínica ' + clinic.name + '?')) {
         setClinicSaving(true)
+        
+        // Also delete from clinicas_config
+        await supabase.from('clinicas_config').delete().eq('nome', clinic.name)
+        // Also delete from horario_comercial
+        await supabase.from('horario_comercial').delete().eq('clinic_id', clinic.id)
+        // Also delete from ia_prompts
+        await supabase.from('ia_prompts').delete().eq('clinic_id', clinic.id)
+
         const { error } = await deleteClinic(clinic.id)
         setClinicSaving(false)
         if (error) {
-          alert('Erro ao excluir clínica. O banco de dados pode estar bloqueando a exclusão devido a dependências (ON DELETE CASCADE ausente). Mensagem: ' + error.message)
+          alert('Erro ao excluir clínica. O banco de dados pode estar bloqueando a exclusão devido a dependências. Mensagem: ' + error.message)
         } else {
           onClose()
           window.location.reload()
@@ -435,6 +552,26 @@ const CRMConfigModal=({onClose,clinic,updateClinic,deleteClinic,estagios,statusL
               <Btn variant="danger" onClick={handleDeleteClinic} disabled={clinicSaving}>Excluir Clínica Permanentemente</Btn>
             </div>
           </div>
+        ) : tab === 'integ' ? (
+          loadingConfig ? <Spinner /> : (
+            <div style={{display:'flex',flexDirection:'column',gap:16}}>
+              <Input label="NOME DA CLÍNICA" value={nome} onChange={setNome} />
+              <Input label="WHATSAPP DA CLÍNICA (Apenas números)" value={whatsapp} onChange={setWhatsapp} placeholder="Ex: 5521999999999" />
+              <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:10}}>
+                <Input label="CHATWOOT INBOX ID" value={inboxId} onChange={setInboxId} placeholder="Ex: 10" />
+                <Input label="CHATWOOT ACCOUNT ID" value={accountId} onChange={v => setAccountId(v)} />
+              </div>
+              <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:10}}>
+                <Input label="UAZAPI TOKEN" value={token} onChange={setToken} />
+                <Input label="UAZAPI INSTANCE NAME" value={instance} onChange={setInstance} />
+              </div>
+              <div style={{display:'flex',justifyContent:'flex-end',marginTop:8}}>
+                <Btn onClick={handleSaveIntegration} disabled={clinicSaving}>
+                  {clinicSaving ? 'Salvando...' : 'Salvar Integração'}
+                </Btn>
+              </div>
+            </div>
+          )
         ) : (
           <>
             <div style={{display:'flex',gap:8,alignItems:'flex-end'}}>
@@ -1343,14 +1480,25 @@ function CRMInline({ clinic, clinics, estagios, statusList, etiquetas, interesse
                       onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background='transparent'}}>
                       <td style={tdS} onClick={e=>{e.stopPropagation();toggle(lead.id)}}><input type="checkbox" checked={isSel} onChange={()=>toggle(lead.id)} onClick={e=>e.stopPropagation()} style={{width:15,height:15,cursor:'pointer',accentColor:D.accent}}/></td>
                       <td style={tdS} onClick={()=>setOpenLead(lead)}>
-                        <div style={{fontWeight:600,fontSize:13,color:D.text}}>{lead.nome} {lead.sobrenome}</div>
-                        <div style={{display:'flex', gap:6, marginTop:4, alignItems:'center', flexWrap:'wrap'}}>
-                          {lead.tipo_lead && (
-                            <span style={{fontSize:9, padding:'1px 6px', borderRadius:99, fontWeight:700, color:lead.tipo_lead==='novo'?'#3b82f6':'#a855f7', background:lead.tipo_lead==='novo'?'rgba(59,130,246,0.15)':'rgba(168,85,247,0.15)', border:`1px solid ${lead.tipo_lead==='novo'?'rgba(59,130,246,0.4)':'rgba(168,85,247,0.4)'}`}}>
-                              {lead.tipo_lead === 'novo' ? 'NOVO' : 'PACIENTE'}
-                            </span>
+                        <div style={{display:'flex', alignItems:'center', gap:10}}>
+                          {lead.foto_url ? (
+                            <img src={lead.foto_url} alt={lead.nome} style={{width:32, height:32, borderRadius:'50%', objectFit:'cover', flexShrink:0, border:`1.5px solid ${lead.tipo_lead==='novo'?'#3b82f6':'#a855f7'}`}} />
+                          ) : (
+                            <div style={{width:32, height:32, borderRadius:'50%', background:lead.tipo_lead==='novo'?'rgba(59,130,246,0.15)':'rgba(168,85,247,0.15)', color:lead.tipo_lead==='novo'?'#3b82f6':'#a855f7', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700, fontSize:12, flexShrink:0, border:`1px solid ${lead.tipo_lead==='novo'?'rgba(59,130,246,0.3)':'rgba(168,85,247,0.3)'}`}}>
+                              {lead.nome?.charAt(0).toUpperCase() || '?'}
+                            </div>
                           )}
-                          {lead.aguardando_retorno&&<span style={{fontSize:10,color:'#F59E0B',fontWeight:600}}>● Aguardando</span>}
+                          <div>
+                            <div style={{fontWeight:600,fontSize:13,color:D.text}}>{lead.nome} {lead.sobrenome}</div>
+                            <div style={{display:'flex', gap:6, marginTop:4, alignItems:'center', flexWrap:'wrap'}}>
+                              {lead.tipo_lead && (
+                                <span style={{fontSize:9, padding:'1px 6px', borderRadius:99, fontWeight:700, color:lead.tipo_lead==='novo'?'#3b82f6':'#a855f7', background:lead.tipo_lead==='novo'?'rgba(59,130,246,0.15)':'rgba(168,85,247,0.15)', border:`1px solid ${lead.tipo_lead==='novo'?'rgba(59,130,246,0.4)':'rgba(168,85,247,0.4)'}`}}>
+                                  {lead.tipo_lead === 'novo' ? 'NOVO' : 'PACIENTE'}
+                                </span>
+                              )}
+                              {lead.aguardando_retorno&&<span style={{fontSize:10,color:'#F59E0B',fontWeight:600}}>● Aguardando</span>}
+                            </div>
+                          </div>
                         </div>
                       </td>
                       <td style={tdS} onClick={()=>setOpenLead(lead)}><span style={{fontSize:12,color:D.sub,fontFamily:'monospace'}}>{lead.whatsapp}</span></td>
@@ -1588,6 +1736,7 @@ export default function App() {
   const adminComponent=(<PainelAdmin clinics={clinics} currentUser={session?.user}/>)
   const contaComponent=(<MinhaConta currentUser={{...currentUser,id:session?.user?.id}} clinics={clinics}/>)
   const automacoesComponent=(<AutomacoesPage clinic={clinicSelecionada} clinics={clinics} onChangeClinic={setClinicSelecionada}/>)
+  const relatoriosComponent=(<RelatoriosPage clinic={clinicSelecionada}/>)
 
   return(
     <div style={{fontFamily:"'DM Sans','Helvetica Neue',sans-serif"}}>
@@ -1605,6 +1754,7 @@ export default function App() {
         onVoltar={()=>setClinicSelecionada(null)}
         CRMComponent={crmComponent}
         AutomacoesComponent={automacoesComponent}
+        RelatoriosComponent={relatoriosComponent}
         AdminComponent={adminComponent}
         ContaComponent={contaComponent}
         currentUser={currentUser}

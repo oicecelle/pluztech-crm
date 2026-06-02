@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { useHorarios, useScripts, useIAPrompt, useAutomacaoLogs, useFollowupConfig, useFollowupFila, useAgendamentosConfig, useAgendamentos } from '../hooks/useAutomacoes'
+import { useHorarios, useScripts, useIAPrompt, useAutomacaoLogs, useFollowupConfig, useFollowupFila, useAgendamentosConfig, useAgendamentos, useEtiquetaMappings } from '../hooks/useAutomacoes'
 
 // ─── PALETA DARK ─────────────────────────────────────────────
 const D = {
@@ -1031,6 +1031,149 @@ const AgendamentosTab = ({ clinicId }) => {
   )
 }
 
+// ─── ABA ETIQUETAS MAPPING ────────────────────────────────────
+const EtiquetasTab = ({ clinicId }) => {
+  const { mappings, statusList, loading, save, remove } = useEtiquetaMappings(clinicId)
+  const [editando, setEditando] = useState(null)
+  const [showModal, setShowModal] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [toast, setToast] = useState(null)
+
+  const showT = (msg, type = 'success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 2500) }
+
+  const blank = { etiqueta_chatwoot: '', status_id: '', acao_remover: 'nenhuma', status_id_remover: '', ativo: true }
+  const [form, setForm] = useState(blank)
+
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  const handleEdit = (m) => {
+    setEditando(m)
+    setForm({ ...m })
+    setShowModal(true)
+  }
+
+  const handleNew = () => {
+    setEditando(null)
+    setForm(blank)
+    setShowModal(true)
+  }
+
+  const handleSave = async () => {
+    if (!form.etiqueta_chatwoot) return showT('Digite a etiqueta do Chatwoot', 'error')
+    if (!form.status_id) return showT('Selecione o status de destino', 'error')
+    
+    setSaving(true)
+    const { error } = await save(form)
+    setSaving(false)
+    if (error) {
+      showT('Erro: ' + error.message, 'error')
+    } else {
+      showT(editando ? 'Mapeamento atualizado!' : 'Mapeamento criado!')
+      setShowModal(false)
+      setForm(blank)
+      setEditando(null)
+    }
+  }
+
+  const handleDelete = async (id) => {
+    if (!confirm('Deseja excluir este mapeamento?')) return
+    const { error } = await remove(id)
+    if (error) showT('Erro ao excluir: ' + error.message, 'error')
+    else showT('Mapeamento excluído!')
+  }
+
+  const thS = { padding: '10px 14px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: D.sub, letterSpacing: '0.06em', borderBottom: `1px solid ${D.border}`, whiteSpace: 'nowrap' }
+  const tdS = { padding: '10px 14px', fontSize: 12, color: D.text, borderBottom: `1px solid ${D.border}22` }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: D.text }}>Mapeamento de Etiquetas</h3>
+          <p style={{ margin: '4px 0 0', fontSize: 13, color: D.sub }}>Altere o status do lead automaticamente ao adicionar ou remover etiquetas no Chatwoot</p>
+        </div>
+        <Btn size="sm" onClick={handleNew}>+ Novo Mapeamento</Btn>
+      </div>
+
+      <Card style={{ background: '#101726', border: '1px solid #1d4ed833' }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: '#60a5fa', marginBottom: 4 }}>💡 Como funciona?</div>
+        <div style={{ fontSize: 12, color: '#93c5fd', lineHeight: 1.5 }}>
+          Quando o operador adicionar uma etiqueta (ex: "Agendado") na conversa do Chatwoot, o lead correspondente terá o status alterado para o status selecionado. Se configurado, a remoção da etiqueta também pode acionar uma mudança de status.
+        </div>
+      </Card>
+
+      {loading ? <Spinner /> : mappings.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '40px 20px', color: D.sub, fontSize: 13, border: `1.5px dashed ${D.border}`, borderRadius: 10 }}>
+          Nenhum mapeamento de etiqueta cadastrado para esta clínica.
+        </div>
+      ) : (
+        <div style={{ border: `1px solid ${D.border}`, borderRadius: 10, overflow: 'hidden', background: D.cardAlt }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: '#141414' }}>
+                <th style={thS}>ETIQUETA CHATWOOT</th>
+                <th style={thS}>AO ADICIONAR (STATUS)</th>
+                <th style={thS}>AO REMOVER</th>
+                <th style={thS}>STATUS</th>
+                <th style={{ ...thS, width: 80, textAlign: 'right' }}>AÇÕES</th>
+              </tr>
+            </thead>
+            <tbody>
+              {mappings.map(m => {
+                const destStatus = statusList.find(s => s.id === m.status_id)?.nome || 'Status não encontrado';
+                const removerStatus = m.acao_remover === 'mudar_status' 
+                  ? statusList.find(s => s.id === m.status_id_remover)?.nome || '—'
+                  : 'Nenhuma ação';
+                
+                return (
+                  <tr key={m.id}>
+                    <td style={tdS}><strong style={{ color: D.text, background: '#222', padding: '2px 8px', borderRadius: 6, border: `1px solid ${D.border}` }}>{m.etiqueta_chatwoot}</strong></td>
+                    <td style={tdS}><span style={{ color: D.success }}>➜ {destStatus}</span></td>
+                    <td style={tdS}>{m.acao_remover === 'mudar_status' ? <span style={{ color: D.danger }}>➜ {removerStatus}</span> : <span style={{ color: D.sub }}>Nenhuma ação</span>}</td>
+                    <td style={tdS}>{m.ativo ? <Badge cor={D.success} label="Ativo" /> : <Badge cor={D.sub} label="Inativo" />}</td>
+                    <td style={{ ...tdS, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <button onClick={() => handleEdit(m)} style={{ background: 'none', border: 'none', color: D.accent, cursor: 'pointer', marginRight: 10, fontSize: 12, fontWeight: 600 }}>Editar</button>
+                      <button onClick={() => handleDelete(m.id)} style={{ background: 'none', border: 'none', color: D.danger, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>Excluir</button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {showModal && (
+        <Modal open onClose={() => setShowModal(false)} title={editando ? 'Editar Mapeamento' : 'Novo Mapeamento de Etiqueta'}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <Input label="ETIQUETA NO CHATWOOT" value={form.etiqueta_chatwoot} onChange={v => set('etiqueta_chatwoot', v)} placeholder="Ex: Agendado, Botox, Sem Interesse" />
+            
+            <Sel label="STATUS DESTINO (AO ADICIONAR)" value={form.status_id} onChange={v => set('status_id', v)} 
+              options={statusList.map(s => ({ value: s.id, label: s.nome }))} placeholder="Selecione o status de destino..." />
+            
+            <Sel label="AÇÃO AO REMOVER A ETIQUETA" value={form.acao_remover} onChange={v => set('acao_remover', v)} 
+              options={[{ value: 'nenhuma', label: 'Nenhuma ação' }, { value: 'mudar_status', label: 'Mudar status do lead' }]} placeholder="Selecione..." />
+            
+            {form.acao_remover === 'mudar_status' && (
+              <Sel label="NOVO STATUS AO REMOVER" value={form.status_id_remover} onChange={v => set('status_id_remover', v)} 
+                options={statusList.map(s => ({ value: s.id, label: s.nome }))} placeholder="Selecione o novo status..." />
+            )}
+
+            <Toggle value={form.ativo} onChange={v => set('ativo', v)} label="Mapeamento ativo" />
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, paddingTop: 8, borderTop: `1px solid ${D.border}` }}>
+              <Btn variant="secondary" onClick={() => setShowModal(false)}>Cancelar</Btn>
+              <Btn onClick={handleSave} disabled={saving}>{saving ? 'Salvando...' : 'Salvar mapeamento'}</Btn>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {toast && <Toast msg={toast.msg} type={toast.type} />}
+    </div>
+  )
+}
+
 // ─── PÁGINA PRINCIPAL ─────────────────────────────────────────
 export default function AutomacoesPage({ clinic, clinics, onChangeClinic }) {
   const [tab, setTab] = useState('horario')
@@ -1040,6 +1183,7 @@ export default function AutomacoesPage({ clinic, clinics, onChangeClinic }) {
     { id:'ia',           label:'🤖 IA' },
     { id:'followup',     label:'🔁 Follow-up' },
     { id:'agendamentos', label:'📅 Agendamentos' },
+    { id:'etiquetas',    label:'🏷️ Etiquetas' },
     { id:'n8n',          label:'🔗 Fluxos N8n' },
     { id:'logs',         label:'📋 Logs' },
   ]
@@ -1068,6 +1212,7 @@ export default function AutomacoesPage({ clinic, clinics, onChangeClinic }) {
         {tab==='ia'           && <IATab clinicId={clinic?.id} />}
         {tab==='followup'     && <FollowUpTab clinicId={clinic?.id} />}
         {tab==='agendamentos' && <AgendamentosTab clinicId={clinic?.id} />}
+        {tab==='etiquetas'    && <EtiquetasTab clinicId={clinic?.id} />}
         {tab==='n8n'          && <N8nTab clinicId={clinic?.id} />}
         {tab==='logs'         && <LogsTab clinicId={clinic?.id} />}
       </div>

@@ -386,22 +386,22 @@ export function useDisparos(clinicId) {
                 body: JSON.stringify({ number: item.whatsapp, text: parte.conteudo }),
               })
             } else if (parte.tipo === 'imagem') {
-              res = await fetch(`${baseUrl}/send/image`, {
+              res = await fetch(`${baseUrl}/send/media`, {
                 method: 'POST',
                 headers: { 'token': tok, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ number: item.whatsapp, url: parte.conteudo }),
+                body: JSON.stringify({ number: item.whatsapp, type: 'image', file: parte.conteudo, fileName: parte.conteudo.split('/').pop() || 'imagem.jpg' }),
               })
             } else if (parte.tipo === 'documento') {
-              res = await fetch(`${baseUrl}/send/document`, {
+              res = await fetch(`${baseUrl}/send/media`, {
                 method: 'POST',
                 headers: { 'token': tok, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ number: item.whatsapp, url: parte.conteudo, fileName: parte.conteudo.split('/').pop() || 'arquivo' }),
+                body: JSON.stringify({ number: item.whatsapp, type: 'document', file: parte.conteudo, fileName: parte.conteudo.split('/').pop() || 'documento' }),
               })
             } else if (parte.tipo === 'audio') {
-              res = await fetch(`${baseUrl}/send/audio`, {
+              res = await fetch(`${baseUrl}/send/media`, {
                 method: 'POST',
                 headers: { 'token': tok, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ number: item.whatsapp, url: parte.conteudo }),
+                body: JSON.stringify({ number: item.whatsapp, type: 'audio', file: parte.conteudo, fileName: parte.conteudo.split('/').pop() || 'audio.mp3' }),
               })
             }
           }

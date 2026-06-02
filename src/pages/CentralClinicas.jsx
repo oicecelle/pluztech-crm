@@ -213,11 +213,21 @@ const ClinicCard = ({ clinic, onClick }) => {
   )
 }
 
-// ─── MODAL NOVA CLÍNICA (com upload de foto) ──────────────────
+// ─── MODAL NOVA CLÍNICA (2 passos) ───────────────────────────
 const NovaClinicaModal = ({ onClose, onCreated }) => {
   const [nome, setNome] = useState('')
   const [fotoFile, setFotoFile] = useState(null)
   const [fotoPreview, setFotoPreview] = useState(null)
+  const [token, setToken] = useState('')
+  const [instance, setInstance] = useState('')
+  const [whatsapp, setWhatsapp] = useState('')
+  const [inboxId, setInboxId] = useState('')
+  const [accountId, setAccountId] = useState('1')
+  const [horarioInicio, setHorarioInicio] = useState('08:00')
+  const [horarioFim, setHorarioFim] = useState('18:00')
+  const [diasSemana, setDiasSemana] = useState([1, 2, 3, 4, 5])
+  const [frequencia, setFrequencia] = useState('diario')
+  const [msgFora, setMsgFora] = useState('Olá! Estamos fora do horário de atendimento.')
   const [saving, setSaving] = useState(false)
   const [erro, setErro] = useState('')
 
@@ -244,47 +254,109 @@ const NovaClinicaModal = ({ onClose, onCreated }) => {
       }
     }
 
-    const { data, error } = await supabase.from('clinics').insert({ name: nome.trim(), foto_url }).select().single()
+    // 1. Insert into clinics
+    const { data: clinic, error: clinicErr } = await supabase.from('clinics').insert({
+      name: nome.trim(),
+      foto_url,
+      numero_whatsapp: whatsapp.trim() || null,
+      chatwoot_inbox_id: inboxId.trim() || null,
+      chatwoot_account_id: accountId ? Number(accountId) : null
+    }).select().single()
+    
+    if (clinicErr) { setSaving(false); return setErro('Erro ao criar clínica: ' + clinicErr.message) }
+
+    // 2. Insert into horario_comercial (using correct DB column names)
+    const { error: horErr } = await supabase.from('horario_comercial').insert({
+      clinic_id: clinic.id,
+      uazapi_token: token.trim() || null,
+      instancia: instance.trim() || null,
+      hora_inicio: horarioInicio,
+      hora_fim: horarioFim,
+      dias_semana: diasSemana,
+      relatorio_periodicidade: frequencia,
+      grupo_relatorio: 'geral',
+      mensagem_fora: msgFora,
+      ativo: true
+    })
+
+    if (horErr) {
+      // Non-blocking log, but show error
+      console.error('Erro ao salvar horario_comercial:', horErr.message)
+    }
+
+    // 3. Insert into clinicas_config (for n8n webhook and copiloto routing)
+    const { error: confErr } = await supabase.from('clinicas_config').insert({
+      nome: nome.trim(),
+      numero_whatsapp: whatsapp.trim() || null,
+      chatwoot_inbox_id: inboxId ? Number(inboxId) : null,
+      chatwoot_account_id: accountId ? Number(accountId) : null,
+      uazapi_token: token.trim() || null,
+      status: 'ativo'
+    })
+
+    if (confErr) {
+      console.error('Erro ao salvar clinicas_config:', confErr.message)
+    }
+
     setSaving(false)
-    if (error) return setErro('Erro ao criar clínica: ' + error.message)
-    onCreated(data)
+    onCreated(clinic)
     onClose()
   }
 
   return (
     <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.7)', backdropFilter:'blur(4px)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
-      <div onClick={e=>e.stopPropagation()} style={{ background:'#1a1a1a', border:`1px solid ${C.borda}`, borderRadius:16, width:'100%', maxWidth:480, boxShadow:'0 30px 80px rgba(0,0,0,0.5)', overflow:'hidden' }}>
+      <div onClick={e=>e.stopPropagation()} style={{ background:'#1a1a1a', border:`1px solid ${C.borda}`, borderRadius:16, width:'100%', maxWidth:500, boxShadow:'0 30px 80px rgba(0,0,0,0.5)', overflow:'hidden', maxHeight:'90vh', overflowY:'auto' }}>
         <div style={{ padding:'20px 24px', borderBottom:`1px solid ${C.borda}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
           <h3 style={{ margin:0, fontSize:15, fontWeight:700, color:C.creme }}>Adicionar clínica</h3>
           <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', fontSize:20, color:C.cinza }}>×</button>
         </div>
         <div style={{ padding:24, display:'flex', flexDirection:'column', gap:16 }}>
+          <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
+            <label style={{ fontSize:11, fontWeight:700, color:C.cinza, letterSpacing:'0.05em' }}>NOME DA CLÍNICA *</label>
+            <input value={nome} onChange={e=>setNome(e.target.value)} placeholder="Ex: Femme Clinic" style={{ border:`1px solid ${C.borda}`, borderRadius:8, padding:'9px 12px', fontSize:14, background:C.input, color:C.creme }} />
+          </div>
 
-          {/* Foto */}
-          <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-            <label style={{ fontSize:11, fontWeight:700, color:C.cinza, letterSpacing:'0.05em' }}>FOTO DA CLÍNICA</label>
-            <div style={{ display:'flex', alignItems:'center', gap:14 }}>
-              <div style={{ width:72, height:72, borderRadius:12, background:C.input, border:`1px dashed ${C.marrom}66`, display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden', flexShrink:0 }}>
-                {fotoPreview
-                  ? <img src={fotoPreview} style={{ width:'100%', height:'100%', objectFit:'cover' }} />
-                  : <span style={{ fontSize:24, color:C.marrom }}>🏥</span>
-                }
-              </div>
-              <div>
-                <label style={{ display:'inline-block', padding:'7px 14px', borderRadius:8, border:`1px solid ${C.marrom}66`, background:C.marrom+'18', color:C.marrom, cursor:'pointer', fontSize:12, fontWeight:600 }}>
-                  {fotoFile ? 'Trocar foto' : 'Selecionar foto'}
-                  <input type="file" accept="image/*" onChange={handleFoto} style={{ display:'none' }} />
-                </label>
-                <div style={{ fontSize:11, color:C.cinza, marginTop:4 }}>JPG, PNG, WEBP</div>
-              </div>
+          <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
+            <label style={{ fontSize:11, fontWeight:700, color:C.cinza }}>WHATSAPP DA CLÍNICA (Apenas números com DDD)</label>
+            <input value={whatsapp} onChange={e=>setWhatsapp(e.target.value)} placeholder="Ex: 5521999999999" style={{ border:`1px solid ${C.borda}`, borderRadius:8, padding:'9px 12px', background:C.input, color:C.creme }} />
+          </div>
+
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+            <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
+              <label style={{ fontSize:11, fontWeight:700, color:C.cinza }}>CHATWOOT INBOX ID</label>
+              <input value={inboxId} onChange={e=>setInboxId(e.target.value)} placeholder="Ex: 10" style={{ border:`1px solid ${C.borda}`, borderRadius:8, padding:'9px 12px', background:C.input, color:C.creme }} />
+            </div>
+            <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
+              <label style={{ fontSize:11, fontWeight:700, color:C.cinza }}>CHATWOOT ACCOUNT ID</label>
+              <input value={accountId} onChange={e=>setAccountId(e.target.value)} placeholder="Ex: 1" style={{ border:`1px solid ${C.borda}`, borderRadius:8, padding:'9px 12px', background:C.input, color:C.creme }} />
             </div>
           </div>
 
-          {/* Nome */}
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+            <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
+              <label style={{ fontSize:11, fontWeight:700, color:C.cinza }}>UAZAPI TOKEN</label>
+              <input value={token} onChange={e=>setToken(e.target.value)} style={{ border:`1px solid ${C.borda}`, borderRadius:8, padding:'9px 12px', background:C.input, color:C.creme }} />
+            </div>
+            <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
+              <label style={{ fontSize:11, fontWeight:700, color:C.cinza }}>INSTANCE NAME</label>
+              <input value={instance} onChange={e=>setInstance(e.target.value)} style={{ border:`1px solid ${C.borda}`, borderRadius:8, padding:'9px 12px', background:C.input, color:C.creme }} />
+            </div>
+          </div>
+
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+            <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
+              <label style={{ fontSize:11, fontWeight:700, color:C.cinza }}>HORÁRIO INÍCIO</label>
+              <input type="time" value={horarioInicio} onChange={e=>setHorarioInicio(e.target.value)} style={{ border:`1px solid ${C.borda}`, borderRadius:8, padding:'9px 12px', background:C.input, color:C.creme }} />
+            </div>
+            <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
+              <label style={{ fontSize:11, fontWeight:700, color:C.cinza }}>HORÁRIO FIM</label>
+              <input type="time" value={horarioFim} onChange={e=>setHorarioFim(e.target.value)} style={{ border:`1px solid ${C.borda}`, borderRadius:8, padding:'9px 12px', background:C.input, color:C.creme }} />
+            </div>
+          </div>
+
           <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
-            <label style={{ fontSize:11, fontWeight:700, color:C.cinza, letterSpacing:'0.05em' }}>NOME DA CLÍNICA *</label>
-            <input value={nome} onChange={e=>setNome(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleCreate()} placeholder="Ex: Femme Clinic" autoFocus
-              style={{ border:`1px solid ${C.borda}`, borderRadius:8, padding:'9px 12px', fontSize:14, outline:'none', fontFamily:'inherit', background:C.input, color:C.creme }} />
+            <label style={{ fontSize:11, fontWeight:700, color:C.cinza }}>MENSAGEM FORA HORÁRIO</label>
+            <textarea value={msgFora} onChange={e=>setMsgFora(e.target.value)} style={{ border:`1px solid ${C.borda}`, borderRadius:8, padding:'9px 12px', background:C.input, color:C.creme, resize:'vertical', minHeight:60 }} />
           </div>
 
           {erro && <div style={{ fontSize:12, color:C.vermelho, background:C.vermelho+'18', padding:'8px 12px', borderRadius:8 }}>{erro}</div>}

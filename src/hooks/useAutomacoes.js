@@ -22,13 +22,43 @@ export function useHorarios(clinicId) {
 
   const save = async (form) => {
     const payload = { ...form, clinic_id: clinicId }
+
+    // Proativa: tenta obter a foto de perfil da clínica a partir da instância do Uazapi
+    let profilePicUrl = null
+    if (form.uazapi_token) {
+      try {
+        const baseUrl = form.uazapi_base_url || 'https://customix.uazapi.com'
+        const res = await fetch(`${baseUrl}/instance/status`, {
+          headers: { 'token': form.uazapi_token }
+        })
+        if (res.ok) {
+          const statusData = await res.json()
+          if (statusData?.instance?.profilePicUrl) {
+            profilePicUrl = statusData.instance.profilePicUrl
+          }
+        }
+      } catch (e) {
+        console.error('Erro ao buscar foto da clínica no Uazapi:', e)
+      }
+    }
+
     if (form.id) {
       const { error } = await supabase.from('horario_comercial').update(payload).eq('id', form.id)
-      if (!error) await fetch()
+      if (!error) {
+        if (profilePicUrl) {
+          await supabase.from('clinics').update({ icon_url: profilePicUrl }).eq('id', clinicId)
+        }
+        await fetch()
+      }
       return { error }
     }
     const { data, error } = await supabase.from('horario_comercial').insert(payload).select().single()
-    if (!error) await fetch()
+    if (!error) {
+      if (profilePicUrl) {
+        await supabase.from('clinics').update({ icon_url: profilePicUrl }).eq('id', clinicId)
+      }
+      await fetch()
+    }
     return { data, error }
   }
 
@@ -66,7 +96,7 @@ export function useScripts(clinicId) {
   useEffect(() => { fetch() }, [fetch])
 
   const save = async (form) => {
-    const { partes, auto_script_partes, ...scriptData } = form
+    const { partes, auto_script_partes, id, created_at, ...scriptData } = form
     const payload = { ...scriptData, clinic_id: clinicId }
 
     let scriptId = form.id
@@ -91,6 +121,7 @@ export function useScripts(clinicId) {
   }
 
   const remove = async (id) => {
+    await supabase.from('auto_script_partes').delete().eq('script_id', id)
     const { error } = await supabase.from('auto_scripts').delete().eq('id', id)
     if (!error) setScripts(s => s.filter(x => x.id !== id))
     return { error }
@@ -112,14 +143,15 @@ export function useIAPrompt(clinicId) {
       .select('*')
       .eq('clinic_id', clinicId)
       .single()
-    setPrompt(data || { clinic_id: clinicId, system_prompt: '', max_tentativas: 2, modelo: 'gpt-4o-mini', temperatura: 0.3, ativo: true })
+    setPrompt(data || { clinic_id: clinicId, system_prompt: '', copiloto_system_prompt: '', chatwoot_token: '', max_tentativas: 2, modelo: 'gpt-4o-mini', temperatura: 0.3, ativo: true })
     setLoading(false)
   }, [clinicId])
 
   useEffect(() => { fetch() }, [fetch])
 
   const save = async (form) => {
-    const payload = { ...form, clinic_id: clinicId }
+    const { id, created_at, updated_at, ...promptData } = form
+    const payload = { ...promptData, clinic_id: clinicId }
     if (form.id) {
       const { error } = await supabase.from('ia_prompts').update(payload).eq('id', form.id)
       if (!error) setPrompt(form)
@@ -313,4 +345,57 @@ export function useAutomacaoLogs(clinicId) {
 
   useEffect(() => { fetch() }, [fetch])
   return { logs, loading, refetch: fetch }
+}
+
+// ─── ETIQUETAS MAPPING ────────────────────────────────────────
+export function useEtiquetaMappings(clinicId) {
+  const [mappings, setMappings] = useState([])
+  const [statusList, setStatusList] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  const fetch = useCallback(async () => {
+    if (!clinicId) return
+    setLoading(true)
+    
+    // Fetch mappings
+    const { data: mData } = await supabase
+      .from('etiqueta_status_mapping')
+      .select('*')
+      .eq('clinic_id', clinicId)
+      .order('criado_em', { ascending: false })
+      
+    // Fetch clinic status list
+    const { data: sData } = await supabase
+      .from('crm_status')
+      .select('id, nome')
+      .eq('clinic_id', clinicId)
+      .order('ordem')
+
+    setMappings(mData || [])
+    setStatusList(sData || [])
+    setLoading(false)
+  }, [clinicId])
+
+  useEffect(() => { fetch() }, [fetch])
+
+  const save = async (form) => {
+    const { id, criado_em, ...data } = form
+    const payload = { ...data, clinic_id: clinicId }
+    if (form.id) {
+      const { error } = await supabase.from('etiqueta_status_mapping').update(payload).eq('id', form.id)
+      if (!error) await fetch()
+      return { error }
+    }
+    const { data: res, error } = await supabase.from('etiqueta_status_mapping').insert(payload).select().single()
+    if (!error) await fetch()
+    return { data: res, error }
+  }
+
+  const remove = async (id) => {
+    const { error } = await supabase.from('etiqueta_status_mapping').delete().eq('id', id)
+    if (!error) setMappings(m => m.filter(x => x.id !== id))
+    return { error }
+  }
+
+  return { mappings, statusList, loading, refetch: fetch, save, remove }
 }

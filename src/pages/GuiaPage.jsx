@@ -695,6 +695,7 @@ const ProcedimentosSection = ({ clinicId }) => {
 // ─── SEÇÕES DO MENU ────────────────────────────────────────────
 const SECOES = [
   { id:'crm',          label:'CRM',                  icon:'📊' },
+  { id:'relatorios',   label:'Relatórios',            icon:'📈' },
   { id:'automacoes',   label:'Automações',            icon:'⚡' },
   { id:'origens',      label:'Origens (Campanhas)',   icon:'📡' },
   { id:'info',         label:'Informações Gerais',    icon:'ℹ️', hideFor:['cliente'] },
@@ -709,7 +710,7 @@ const SECOES = [
 ]
 
 // ─── PÁGINA PRINCIPAL DO GUIA ─────────────────────────────────
-export default function GuiaPage({ clinic, onVoltar, CRMComponent, AutomacoesComponent, AdminComponent, ContaComponent, currentUser, onPainelAdmin, onMinhaConta, onSignOut }) {
+export default function GuiaPage({ clinic, onVoltar, CRMComponent, AutomacoesComponent, RelatoriosComponent, AdminComponent, ContaComponent, currentUser, onPainelAdmin, onMinhaConta, onSignOut }) {
   const [secao, setSecao] = useState('crm')
   const [busca, setBusca] = useState('')
   const [sidebarAberta, setSidebarAberta] = useState(true)
@@ -813,6 +814,7 @@ export default function GuiaPage({ clinic, onVoltar, CRMComponent, AutomacoesCom
 
         <div style={{ padding:28 }}>
           {secao === 'crm'          && CRMComponent}
+          {secao === 'relatorios'   && RelatoriosComponent}
           {secao === 'automacoes'   && AutomacoesComponent}
           {secao === 'origens'      && <SecaoGenerica titulo="Origens (Campanhas)" subtitulo="Cadastre origens e associe mensagens-gatilho para rastreamento automático" dados={origens} loading={lOri} onSave={sOri} onRemove={rOri} expandivel campos={[{key:'nome',label:'Nome da Origem / Campanha'},{key:'gatilho_mensagem',label:'Mensagem-Gatilho Exata (opcional)',rows:2}]} />}
           {secao === 'info'         && <InfoGeral clinicId={clinic.id} />}
