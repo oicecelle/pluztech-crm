@@ -806,7 +806,7 @@ function DisparoModal({leads,selected,templates,onClose,onCreateDisparo,onExecut
       template_id:usarCustom?null:templateId,
       mensagem_base:textoBase,
       partes:usarCustom?partesValidas:null,
-      agendado_para:agendadoPara||null,
+      agendado_para:agendadoPara ? new Date(agendadoPara).toISOString() : null,
       intervalo_tipo:intervalo,
       intervalo_segundos:intervalo==='fixo'?intervaloFixo:null,
       status:agendadoPara?'agendado':'rascunho',
