@@ -1587,9 +1587,13 @@ function CRMInline({ clinic, clinics, estagios, statusList, etiquetas, interesse
                           </Btn>
                           <Btn variant="danger" size="sm" onClick={async()=>{
                             if(!window.confirm('Cancelar este disparo?')) return
-                            await supabase.from('disparos').update({status:'cancelado'}).eq('id',d.id)
-                            showT('Disparo cancelado')
-                            refetchDisparos?.()
+                            const {error}=await supabase.from('disparos').update({status:'cancelado'}).eq('id',d.id)
+                            if(error){
+                              alert('Erro ao cancelar disparo: ' + error.message)
+                            } else {
+                              showT('Disparo cancelado')
+                              refetchDisparos?.()
+                            }
                           }}>✕ Cancelar</Btn>
                         </>
                       )}
